@@ -430,6 +430,19 @@ and deleting options.</a:documentation>
                     </element>
                   </choice>
                 </optional>
+                <optional>
+                  <!-- every CPUDUM seconds write results to disc. -->
+                  <element name="cpu_dump_period">
+                    <a:documentation>This is usually disabled.</a:documentation>
+                    <ref name="real"/>
+                  </element>
+                </optional>
+                <optional>
+                  <element name="wall_time_dump_period">
+                    <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
+                    <ref name="real"/>
+                  </element>
+                </optional>
                 <oneOrMore>
                   <element name="particle_subgroup">
                     <a:documentation>Particle subgroups arrays specified within a particle group. All subgroups utilize the same velocity field

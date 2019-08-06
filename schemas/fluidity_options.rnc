@@ -353,6 +353,15 @@ start =
 			  )
 		      }
 		  )?,
+		  # every CPUDUM seconds write results to disc.
+		  ## This is usually disabled.
+		  element cpu_dump_period {
+		      real
+		  }?,
+		  ## The period between dumps in walltime seconds. This is usually disabled.
+		  element wall_time_dump_period {
+		      real
+		  }?,
                   ## Particle subgroups arrays specified within a particle group. All subgroups utilize the same velocity field
                   ## and carry the same attributes. Subgroups can have different initial positions specified via a python
                   ## function of from a file.
