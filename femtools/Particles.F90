@@ -984,12 +984,13 @@ contains
     if (present(output_comm)) comm = output_comm
 
     ! we store the number of points per process, so gather them
-    ! this is because h5part attributes must be agreed upon by all,
-    ! so every process needs to know the size for every other process
+    ! onto the root (which is responsible for writing the
+    ! attribute to disk) -- this works as long as we don't later
+    ! read the npoints attribute
     call mpi_comm_size(comm, commsize, ierr)
     allocate(npoints(commsize))
-    call mpi_allgather([int(particle_list%length, 8)], 1, MPI_INTEGER8, &
-         npoints, 1, MPI_INTEGER8, comm, ierr)
+    call mpi_gather([int(particle_list%length, 8)], 1, MPI_INTEGER8, &
+         npoints, 1, MPI_INTEGER8, 0, comm, ierr)
 
     ! construct a new particle checkpoint filename
     particles_cp_filename = trim(prefix)
