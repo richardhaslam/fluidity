@@ -153,6 +153,7 @@ contains
        end if
     end do
 
+    list_counter = 1
     do i = 1,particle_groups
        group_path = "/particles/particle_group["//int2str(i-1)//"]"
 
@@ -977,7 +978,7 @@ contains
     integer, intent(in) :: timestep
     real, intent(in) :: time
 
-    integer :: attribute_dims
+    integer, dimension(3) :: attribute_dims
     integer :: i, k, dim
     integer :: particle_groups, particle_subgroups, list_counter
     integer :: s_att, v_att, t_att, tot_atts
@@ -1007,10 +1008,9 @@ contains
       do k = 1, particle_subgroups
         if (output_group) then
           subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-          s_att = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
-          v_att = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
-          t_att = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
-          attribute_dims=s_att + dim*v_att + (dim**2)*t_att
+          attribute_dims(1) = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
+          attribute_dims(2) = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
+          attribute_dims(3) = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
           call write_particles_subgroup(state, particle_lists(list_counter), attribute_dims, timestep, time, trim(subgroup_path))
           list_counter = list_counter + 1
         end if
@@ -1024,10 +1024,10 @@ contains
     type(detector_linked_list), intent(inout) :: detector_list
     integer, intent(in) :: timestep
     real, intent(in) :: time
-    integer, intent(in) :: attribute_dims !dimensions of particles attribute information carried (attributes at current timestep, field values and attribute values at previous timestep)
+    integer, dimension(3), intent(in) :: attribute_dims
     character(len=*), intent(in) :: subgroup_path
 
-    integer :: dim, i
+    integer :: dim, i, j, k, att, tot_atts
     integer(kind=8) :: h5_ierror
     real, dimension(:,:), allocatable :: positions, attrib_data
     integer, dimension(:), allocatable :: node_ids
@@ -1050,14 +1050,15 @@ contains
     ! set up arrays to hold all node data (this won't work with large numbers of particles)
     vfield => extract_vector_field(state, "Coordinate")
     dim = vfield%dim
+    tot_atts = attribute_dims(1) + dim*attribute_dims(2) + dim*dim*attribute_dims(3)
     allocate(positions(detector_list%length, 3))
-    allocate(attrib_data(detector_list%length, attribute_dims))
+    allocate(attrib_data(detector_list%length, tot_atts))
     allocate(node_ids(detector_list%length))
 
     node => detector_list%first
     position_loop: do i = 1, detector_list%length
       assert(size(node%position) == dim)
-      assert(size(node%attributes) == attribute_dims)
+      assert(size(node%attributes) == tot_atts)
 
       positions(i,1:dim) = node%position(:)
       attrib_data(i,:) = node%attributes(:)
@@ -1080,11 +1081,31 @@ contains
 
     h5_ierror = h5pt_writedata_i4(detector_list%h5_id, "id", node_ids(:))
 
-    ! write out attributes
-    attribute_loop: do i = 1, attribute_dims
-      call get_option(subgroup_path // "/attributes/attribute["//int2str(i-1)//"]/name", attname)
-      h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname), attrib_data(:,i))
-    end do attribute_loop
+    ! write out attributes -- scalar, vector, tensor
+    att = 1
+    scalar_attribute_loop: do i = 1, attribute_dims(1)
+      call get_option(subgroup_path // "/attributes/scalar_attribute["//int2str(i-1)//"]/name", attname)
+      h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname), attrib_data(:,att))
+      att = att + 1
+    end do scalar_attribute_loop
+
+    vector_attribute_loop: do i = 1, attribute_dims(2)
+      call get_option(subgroup_path // "/attributes/vector_attribute["//int2str(i-1)//"]/name", attname)
+      do j = 1, dim
+        h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname)//"_"//int2str(j), attrib_data(:,att))
+        att = att + 1
+      end do
+    end do vector_attribute_loop
+
+    tensor_attribute_loop: do i = 1, attribute_dims(3)
+      call get_option(subgroup_path // "/attributes_tensor_attribute["//int2str(i-1)//"]/name", attname)
+      do j = 1, dim
+        do k = 1, dim
+          h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname)//"_"//int2str(j)//int2str(k), attrib_data(:,att))
+          att = att + 1
+        end do
+      end do
+    end do tensor_attribute_loop
 
     deallocate(node_ids)
     deallocate(attrib_data)
