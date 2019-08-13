@@ -196,19 +196,19 @@ module embed_python
           & ndete, x, y, z, t, dt, fld_name_len, nfields, field_names, field_vals, old_nfields, old_field_names, &
           & old_field_vals, old_nattributes, old_att_names, old_attributes, result, stat) bind(c)
       !! Interface to c wrapper function.
-      use iso_c_binding, only: c_double, c_char
+      use iso_c_binding, only: c_double, c_char, c_int
       use global_parameters, only: FIELD_NAME_LEN
       implicit none
-      integer, intent(in) :: function_len
+      integer(c_int), intent(in), value :: function_len
       character(kind=c_char):: function
-      integer, intent(in) :: dim, ndete
-      integer, dimension(3), intent(in) :: nfields, old_nfields, old_nattributes
-      integer, intent(in) :: fld_name_len
+      integer(c_int), intent(in), value :: dim, ndete
+      integer(c_int), dimension(3), intent(in) :: nfields, old_nfields, old_nattributes
+      integer(c_int), intent(in), value :: fld_name_len
       real(kind = c_double), dimension(ndete), intent(in) :: x
       real(kind = c_double), dimension(ndete), intent(in) :: y
       real(kind = c_double), dimension(ndete), intent(in) :: z
-      real(kind = c_double), intent(in) :: t
-      real(kind = c_double), intent(in) :: dt
+      real(kind = c_double), intent(in), value :: t
+      real(kind = c_double), intent(in), value :: dt
       character(kind = c_char), dimension(FIELD_NAME_LEN,sum(nfields)), intent(in) :: field_names
       real(kind = c_double), dimension(nfields(1)+dim*nfields(2)+dim**2*nfields(3),ndete), intent(in) :: field_vals
       character(kind = c_char), dimension(FIELD_NAME_LEN,sum(old_nfields)), intent(in) :: old_field_names
