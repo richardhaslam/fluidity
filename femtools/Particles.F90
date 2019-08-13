@@ -286,11 +286,10 @@ contains
             l, LAGRANGIAN_DETECTOR, trim(particle_name), attribute_size, global=global)
     end do
     if (attribute_size(1)/=0) then
-       call update_particle_subgroup_attributes_and_fields(state, dt, current_time, subgroup_path, p_list)
+       call update_particle_subgroup_attributes_and_fields(state, current_time, dt, subgroup_path, p_list)
     end if
 
     deallocate(coords)
-
   end subroutine read_particles_from_python
 
   subroutine read_particles_from_file(sub_particles, subname, attribute_size, state, xfield, dim, subgroup_path, p_list, number_of_partitions)
@@ -436,7 +435,6 @@ contains
     p_list%h5_id = h5_openfile(trim(filename) // '.particles.' // trim(subname) // '.h5part', H5_O_WRONLY, H5_PROP_DEFAULT)
 
     ! optionally set any file attributes here?
-
   end subroutine set_particle_output_file
 
   subroutine create_single_particle(detector_list, xfield, position, id, type, name, attribute_size, attribute_vals, global)
