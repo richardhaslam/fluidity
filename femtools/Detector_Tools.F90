@@ -34,12 +34,13 @@ module detector_tools
   use global_parameters, only: OPTION_PATH_LEN, FIELD_NAME_LEN
   use futils, only: int2str
   use elements, only: local_coord_count
-  use embed_python, only: set_detectors_from_python, set_particles_from_python_fields, set_particles_from_python
+  use embed_python
   use integer_hash_table_module
   use parallel_tools
   use parallel_fields, only: element_owned
   use fields
-  use state_module, only: state_type, extract_scalar_field, aliased
+  use state_module, only: state_type, extract_scalar_field, aliased, &
+       & extract_vector_field, extract_tensor_field
   use field_options
   use detector_data_types
   use pickers
@@ -51,9 +52,14 @@ module detector_tools
   public :: insert, allocate, deallocate, copy, move, move_all, remove, &
             delete, delete_all, pack_detector, unpack_detector, &
             detector_value, set_detector_coords_from_python, &
-            detector_buffer_size, set_particle_attribute_from_python, &
-            set_particle_attribute_from_python_fields, temp_insert, &
-            temp_deallocate, temp_delete, temp_delete_all, temp_remove
+            detector_buffer_size, temp_insert, &
+            temp_deallocate, temp_delete, temp_delete_all, temp_remove, &
+            set_particle_scalar_attribute_from_python, &
+            set_particle_scalar_attribute_from_python_fields, &
+            set_particle_vector_attribute_from_python, &
+            set_particle_vector_attribute_from_python_fields, &
+            set_particle_tensor_attribute_from_python, &
+            set_particle_tensor_attribute_from_python_fields
 
   interface insert
      module procedure insert_into_detector_list
@@ -751,13 +757,13 @@ contains
 
   end subroutine set_detector_coords_from_python
 
-  subroutine set_particle_attribute_from_python(attributes, positions, nparts, func, time, dt)
+  subroutine set_particle_scalar_attribute_from_python(attributes, positions, nparts, func, time, dt)
     !!< Given the particle position and time, evaluate the specified python function for a group of particles
     !!< specified in the string func at that location. 
     real, dimension(:), intent(inout) :: attributes
     !! Func may contain any python at all but the following function must
     !! be defined::
-    !!  def val(X,t)
+    !!  def val(X,t,dt)
     !! where X is position and t is the time. The result must be a float. 
     character(len=*), intent(in) :: func !function for attributes to be set from
     integer, intent(in) :: nparts !number of particles
@@ -766,9 +772,10 @@ contains
     real, dimension(:,:), target, intent(in) :: positions !current particle positions
     real, dimension(:), pointer :: lvx,lvy,lvz
     real, dimension(0), target :: zero
-    integer :: stat
+    integer :: stat, dim
 
-    select case(size(positions(:,1)))
+    dim = size(positions(:,1))
+    select case(dim)
     case(1)
       lvx=>positions(1,:)
       lvy=>zero
@@ -782,21 +789,22 @@ contains
       lvy=>positions(2,:)
       lvz=>positions(3,:)
     end select
-    call set_particles_from_python(func, len(func), size(positions(:,1)), &
+
+    call set_scalar_particles_from_python(func, len(func), dim, &
          nparts, lvx, lvy, lvz, time, dt, attributes, stat)
     if (stat/=0) then
       ewrite(-1, *) "Python error, Python string was:"
       ewrite(-1 , *) trim(func)
       FLExit("Dying")
     end if
-  end subroutine set_particle_attribute_from_python
+  end subroutine set_particle_scalar_attribute_from_python
 
-  subroutine set_particle_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, attributes, old_att_names, old_attributes, func, time, dt)
+  subroutine set_particle_scalar_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, attributes, n_oldatts, old_att_names, old_attributes, func, time, dt)
     !!< Given a particle position, time and field values, evaluate the python function
     !!< specified in the string func at that location. 
     !! Func may contain any python at all but the following function must
     !! be defined::
-    !!  def val(X,t, fields)
+    !!  def val(X,t,dt,fields)
     !! where X is position t is the time, and fields is a dictionary where fields["FieldName"] and fields["OldFieldName" store
     !! the interpolated value of "FieldName" at the particle position at the current and previous time levels, and fields["OldAttributeName"] stores the attribute
     !! value at the previous time level. The result must be a float. 
@@ -812,34 +820,68 @@ contains
     integer, intent(in) :: nparts !number of particles
     real, intent(in) :: time
     real, intent(in) :: dt
+    integer, dimension(3), intent(in) :: n_oldatts
     character, allocatable, dimension(:,:) :: field_names
     character, allocatable, dimension(:,:) :: old_field_names
     real, allocatable, dimension(:,:) :: field_vals
     real, allocatable, dimension(:,:) :: old_field_vals
     real :: value
+    real, allocatable, dimension(:) :: vvalue
+    real, allocatable, dimension(:,:) :: tvalue
     real, dimension(:), pointer :: lvx,lvy,lvz
     real, dimension(0), target :: zero
     character(len=FIELD_NAME_LEN) :: buffer
     type(detector_type), pointer :: particle
-
     type(scalar_field), pointer :: sfield
+    type(vector_field), pointer :: vfield
+    type(tensor_field), pointer :: tfield
     character(len=FIELD_NAME_LEN) :: name
-    integer :: phase, i, j, nfields
-    integer :: p, f, stat, k, pfields, l, old_nfields, old_nattributes
+    integer, dimension(3) :: nfields, n_oldfields !number of scalar, vector and tensor fields
+    integer :: phase, i, j, dim
+    integer :: p, f, stat, k, pfields, l, m
 
-    nfields=0
-    do phase=1,size(state)
-       do i=1, size(state(phase)%scalar_names)
-          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(i))
+    nfields(:) = 0
+    n_oldfields(:) = 0
+    do phase = 1,size(state)
+       do f = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
           if (sfield%option_path=="".or.aliased(sfield)) then
              cycle
           else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
-             nfields=nfields+1
+             nfields(1) = nfields(1) + 1
+             if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(1) = n_oldfields(1) + 1
+             end if
           end if
        end do
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             nfields(2) = nfields(2) + 1
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(2) = n_oldfields(2) + 1
+             end if
+          end if
+       end do
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                nfields(3) = nfields(3) + 1
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   n_oldfields(3) = n_oldfields(3) + 1
+                end if
+             end if
+          end do
+       end if
     end do
 
-    select case(size(positions(:,1)))
+    dim = size(positions(:,1))
+    select case(dim)
     case(1)
       lvx=>positions(1,:)
       lvy=>zero
@@ -852,19 +894,19 @@ contains
       lvx=>positions(1,:)
       lvy=>positions(2,:)
       lvz=>positions(3,:)
-   end select
+    end select
 
     particle => particle_list%first
-    
-    old_nfields = size(particle%old_fields)
-    old_nattributes = size(particle%old_attributes)
 
-    allocate(field_names(FIELD_NAME_LEN,nfields))
-    allocate(field_vals(nfields,nparts))
-    allocate(old_field_names(FIELD_NAME_LEN,size(particle%old_fields)))
+    allocate(field_names(FIELD_NAME_LEN,sum(nfields)))
+    allocate(field_vals((nfields(1)+(dim*nfields(2))+((dim**2)*nfields(3))),nparts))
+    allocate(old_field_names(FIELD_NAME_LEN,sum(n_oldfields)))
     allocate(old_field_vals(size(particle%old_fields),nparts))
+    allocate(vvalue(dim))
+    allocate(tvalue(dim,dim))
     j=1
     l=1
+    !scalar fields, then vector fields, then tensor fields
     do phase=1,size(state)
        do f = 1, size(state(phase)%scalar_names)
           sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
@@ -884,22 +926,83 @@ contains
                    old_field_names(k,l)=name(k-3:k-3)
                 end do
                 old_field_names(k,l)= C_NULL_CHAR
-                do i = 1,nparts    
-                   value = eval_field(ele(i), sfield, lcoords(:,i))
-                   field_vals(j,i)=value
-                   old_field_vals(l,i)=value
-                end do
                 l=l+1
-             else
-                do i = 1,nparts
-                   value = eval_field(ele(i), sfield, lcoords(:,i))
-                   field_vals(j,i)=value
-                end do
              end if
+             do i = 1,nparts
+                value = eval_field(ele(i), sfield, lcoords(:,i))
+                field_vals(j,i)=value
+             end do
              j=j+1
           end if
        end do
     end do
+
+    j=1
+    do phase=1,size(state)
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             name=trim(state(phase)%vector_names(f))
+             do k = 1,len_trim(name)
+                field_names(k,nfields(1)+j)=name(k:k)
+             end do
+             field_names(k,nfields(1)+j)= C_NULL_CHAR
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                old_field_names(1,l) = 'O'
+                old_field_names(2,l) = 'l'
+                old_field_names(3,l) = 'd'
+                do k = 4,len_trim(name)+3
+                   old_field_names(k,l)=name(k-3:k-3)
+                end do
+                old_field_names(k,l)= C_NULL_CHAR
+                l=l+1
+             end if
+             do i = 1,nparts
+                vvalue = eval_field(ele(i), vfield, lcoords(:,i))
+                field_vals(nfields(1)+1+((j-1)*dim):nfields(1)+dim+((j-1)*dim),i)=vvalue(:)
+             end do
+             j=j+1
+          end if
+       end do
+    end do
+
+    j=1
+    do phase=1,size(state)
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                name=trim(state(phase)%tensor_names(f))
+                do k = 1,len_trim(name)
+                   field_names(k,nfields(1)+nfields(2)+j)=name(k:k)
+                end do
+                field_names(k,nfields(1)+nfields(2)+j)= C_NULL_CHAR
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   old_field_names(1,l) = 'O'
+                   old_field_names(2,l) = 'l'
+                   old_field_names(3,l) = 'd'
+                   do k = 4,len_trim(name)+3
+                      old_field_names(k,l)=name(k-3:k-3)
+                   end do
+                   old_field_names(k,l)= C_NULL_CHAR
+                   l=l+1
+                end if
+                do i = 1,nparts
+                   tvalue = eval_field(ele(i), tfield, lcoords(:,i))
+                   do m = 1, dim
+                      field_vals(nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+1:nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+dim,i)=tvalue(:,m)!!!check this
+                   end do
+                end do
+                j=j+1
+             end if
+          end do
+       end if
+    end do
+       
     particle => particle_list%first
     if (allocated(particle%old_fields)) then
        particle => particle_list%first
@@ -908,10 +1011,10 @@ contains
           particle=>particle%next
        end do
     end if
-    
-    call set_particles_from_python_fields(func, len(func), size(positions(:,1)), nparts, &
-         lvx, lvy, lvz, time, dt, nfields, field_names, field_vals, old_nfields, old_field_names, &
-         old_field_vals, old_nattributes, old_att_names, old_attributes, attributes, stat)
+
+    call set_scalar_particles_from_python_fields(func, len(func), dim, nparts, &
+         lvx, lvy, lvz, time, dt, nfields, field_names, field_vals, n_oldfields, old_field_names, &
+         old_field_vals, n_oldatts, old_att_names, old_attributes, attributes, stat)
     if (stat/=0) then
        ewrite(-1, *) "Python error, Python string was:"
        ewrite(-1 , *) trim(func)
@@ -922,7 +1025,579 @@ contains
     deallocate(field_vals)
     deallocate(old_field_names)
     deallocate(old_field_vals)
+    deallocate(vvalue)
+    deallocate(tvalue)
     
-  end subroutine set_particle_attribute_from_python_fields
+  end subroutine set_particle_scalar_attribute_from_python_fields
+
+  subroutine set_particle_vector_attribute_from_python(attributes, positions, nparts, func, time, dt)
+    !!< Given the particle position and time, evaluate the specified python function for a group of particles
+    !!< specified in the string func at that location. 
+    real, dimension(:,:), intent(inout) :: attributes
+    !! Func may contain any python at all but the following function must
+    !! be defined::
+    !!  def val(X,t,dt)
+    !! where X is position and t is the time. The result must be a float. 
+    character(len=*), intent(in) :: func !function for attributes to be set from
+    integer, intent(in) :: nparts !number of particles
+    real, intent(in) :: time !current simulation time
+    real, intent(in) :: dt !current timestep
+    real, dimension(:,:), target, intent(in) :: positions !current particle positions
+    real, dimension(:), pointer :: lvx,lvy,lvz
+    real, dimension(0), target :: zero
+    integer :: stat, dim
+
+    dim = size(positions(:,1))
+    select case(dim)
+    case(1)
+      lvx=>positions(1,:)
+      lvy=>zero
+      lvz=>zero
+    case(2)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>zero
+    case(3)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>positions(3,:)
+    end select
+
+    ewrite(2,*) "vec test"
+
+    call set_vector_particles_from_python(func, len(func), dim, &
+         nparts, lvx, lvy, lvz, time, dt, attributes, stat)
+    if (stat/=0) then
+      ewrite(-1, *) "Python error, Python string was:"
+      ewrite(-1 , *) trim(func)
+      FLExit("Dying")
+    end if
+  end subroutine set_particle_vector_attribute_from_python
+
+  subroutine set_particle_vector_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, attributes, n_oldatts, old_att_names, old_attributes, func, time, dt)
+    !!< Given a particle position, time and field values, evaluate the python function
+    !!< specified in the string func at that location. 
+    !! Func may contain any python at all but the following function must
+    !! be defined::
+    !!  def val(X,t,dt,fields)
+    !! where X is position t is the time, and fields is a dictionary where fields["FieldName"] and fields["OldFieldName" store
+    !! the interpolated value of "FieldName" at the particle position at the current and previous time levels, and fields["OldAttributeName"] stores the attribute
+    !! value at the previous time level. The result must be a float. 
+    type(detector_linked_list), intent(in) :: particle_list
+    type(state_type), dimension(:), intent(in) :: state
+    real, dimension(:,:), intent(in) :: old_attributes !Attribute values from the previous timestep
+    character, dimension(:,:), intent(in) :: old_att_names !Names of attributes stored from the previous timestep
+    real, dimension(:,:), intent(inout) :: attributes !Attribute values to be set
+    real, dimension(:,:), target, intent(in) :: positions !positions of particles
+    real, dimension(:,:), intent(in) :: lcoords !local coordinates of the particle position
+    integer, dimension(:), intent(in) :: ele !elements particles are found in
+    character(len=*), intent(in) :: func !function for attributes to be set from
+    integer, intent(in) :: nparts !number of particles
+    real, intent(in) :: time
+    real, intent(in) :: dt
+    integer, dimension(3), intent(in) :: n_oldatts
+    character, allocatable, dimension(:,:) :: field_names
+    character, allocatable, dimension(:,:) :: old_field_names
+    real, allocatable, dimension(:,:) :: field_vals
+    real, allocatable, dimension(:,:) :: old_field_vals
+    real :: value
+    real, allocatable, dimension(:) :: vvalue
+    real, allocatable, dimension(:,:) :: tvalue
+    real, dimension(:), pointer :: lvx,lvy,lvz
+    real, dimension(0), target :: zero
+    character(len=FIELD_NAME_LEN) :: buffer
+    type(detector_type), pointer :: particle
+    type(scalar_field), pointer :: sfield
+    type(vector_field), pointer :: vfield
+    type(tensor_field), pointer :: tfield
+    character(len=FIELD_NAME_LEN) :: name
+    integer, dimension(3) :: nfields, n_oldfields !number of scalar, vector and tensor fields
+    integer :: phase, i, j, dim
+    integer :: p, f, stat, k, pfields, l, m
+
+    nfields(:) = 0
+    n_oldfields(:) = 0
+    do phase = 1,size(state)
+       do f = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
+          if (sfield%option_path=="".or.aliased(sfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
+             nfields(1) = nfields(1) + 1
+             if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(1) = n_oldfields(1) + 1
+             end if
+          end if
+       end do
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             nfields(2) = nfields(2) + 1
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(2) = n_oldfields(2) + 1
+             end if
+          end if
+       end do
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                nfields(3) = nfields(3) + 1
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   n_oldfields(3) = n_oldfields(3) + 1
+                end if
+             end if
+          end do
+       end if
+    end do
+
+    dim = size(positions(:,1))
+    select case(dim)
+    case(1)
+      lvx=>positions(1,:)
+      lvy=>zero
+      lvz=>zero
+    case(2)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>zero
+    case(3)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>positions(3,:)
+    end select
+
+    particle => particle_list%first
+
+    allocate(field_names(FIELD_NAME_LEN,sum(nfields)))
+    allocate(field_vals((nfields(1)+(dim*nfields(2))+((dim**2)*nfields(3))),nparts))
+    allocate(old_field_names(FIELD_NAME_LEN,size(particle%old_fields)))
+    allocate(old_field_vals(size(particle%old_fields),nparts))
+    allocate(vvalue(dim))
+    allocate(tvalue(dim,dim))
+    j=1
+    l=1
+
+    !scalar fields, then vector fields, then tensor fields
+    do phase=1,size(state)
+       do f = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
+          if (sfield%option_path=="".or.aliased(sfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
+             name=trim(state(phase)%scalar_names(f))
+             do k = 1,len_trim(name)
+                field_names(k,j)=name(k:k)
+             end do
+             field_names(k,j)= C_NULL_CHAR
+             if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                old_field_names(1,l) = 'O'
+                old_field_names(2,l) = 'l'
+                old_field_names(3,l) = 'd'
+                do k = 4,len_trim(name)+3
+                   old_field_names(k,l)=name(k-3:k-3)
+                end do
+                old_field_names(k,l)= C_NULL_CHAR
+                l=l+1
+             end if
+             do i = 1,nparts
+                value = eval_field(ele(i), sfield, lcoords(:,i))
+                field_vals(j,i)=value
+             end do
+             j=j+1
+          end if
+       end do
+    end do
+
+    j=1
+    do phase=1,size(state)
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             name=trim(state(phase)%vector_names(f))
+             do k = 1,len_trim(name)
+                field_names(k,nfields(1)+j)=name(k:k)
+             end do
+             field_names(k,nfields(1)+j)= C_NULL_CHAR
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                old_field_names(1,l) = 'O'
+                old_field_names(2,l) = 'l'
+                old_field_names(3,l) = 'd'
+                do k = 4,len_trim(name)+3
+                   old_field_names(k,l)=name(k-3:k-3)
+                end do
+                old_field_names(k,l)= C_NULL_CHAR
+                l=l+1
+             end if
+             do i = 1,nparts
+                vvalue = eval_field(ele(i), vfield, lcoords(:,i))
+                field_vals(nfields(1)+1+((j-1)*dim):nfields(1)+dim+((j-1)*dim),i)=vvalue(:)
+             end do
+             j=j+1
+          end if
+       end do
+    end do
+
+    j=1
+    do phase=1,size(state)
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                name=trim(state(phase)%tensor_names(f))
+                do k = 1,len_trim(name)
+                   field_names(k,nfields(1)+nfields(2)+j)=name(k:k)
+                end do
+                field_names(k,nfields(1)+nfields(2)+j)= C_NULL_CHAR
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   old_field_names(1,l) = 'O'
+                   old_field_names(2,l) = 'l'
+                   old_field_names(3,l) = 'd'
+                   do k = 4,len_trim(name)+3
+                      old_field_names(k,l)=name(k-3:k-3)
+                   end do
+                   old_field_names(k,l)= C_NULL_CHAR
+                   l=l+1
+                end if
+                do i = 1,nparts
+                   tvalue = eval_field(ele(i), tfield, lcoords(:,i))
+                   do m = 1, dim
+                      field_vals(nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+1:nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+dim,i)=tvalue(:,m)!!!check this
+                   end do
+                end do
+                j=j+1
+             end if
+          end do
+       end if
+    end do
+    particle => particle_list%first
+    if (allocated(particle%old_fields)) then
+       particle => particle_list%first
+       do i = 1,nparts
+          old_field_vals(:,i) = particle%old_fields
+          particle=>particle%next
+       end do
+    end if
+
+    call set_vector_particles_from_python_fields(func, len(func), dim, nparts, &
+         lvx, lvy, lvz, time, dt, nfields, field_names, field_vals, n_oldfields, old_field_names, &
+         old_field_vals, n_oldatts, old_att_names, old_attributes, attributes, stat)
+    if (stat/=0) then
+       ewrite(-1, *) "Python error, Python string was:"
+       ewrite(-1 , *) trim(func)
+       FLExit("Dying")
+    end if
+    
+    deallocate(field_names)
+    deallocate(field_vals)
+    deallocate(old_field_names)
+    deallocate(old_field_vals)
+    deallocate(vvalue)
+    deallocate(tvalue)
+    
+  end subroutine set_particle_vector_attribute_from_python_fields
+
+  subroutine set_particle_tensor_attribute_from_python(attributes, positions, nparts, func, time, dt)
+    !!< Given the particle position and time, evaluate the specified python function for a group of particles
+    !!< specified in the string func at that location. 
+    real, dimension(:,:), intent(inout) :: attributes
+    !! Func may contain any python at all but the following function must
+    !! be defined::
+    !!  def val(X,t,dt)
+    !! where X is position and t is the time. The result must be a float. 
+    character(len=*), intent(in) :: func !function for attributes to be set from
+    integer, intent(in) :: nparts !number of particles
+    real, intent(in) :: time !current simulation time
+    real, intent(in) :: dt !current timestep
+    real, dimension(:,:), target, intent(in) :: positions !current particle positions
+    real, dimension(:), pointer :: lvx,lvy,lvz
+    real, dimension(0), target :: zero
+    real, dimension(:,:,:), allocatable :: tensor_res
+    integer :: i, j, dim
+    integer :: stat
+
+    dim = size(positions(:,1))
+
+    select case(dim)
+    case(1)
+      lvx=>positions(1,:)
+      lvy=>zero
+      lvz=>zero
+    case(2)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>zero
+    case(3)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>positions(3,:)
+    end select
+
+    allocate(tensor_res(dim,dim,nparts))
+    call set_tensor_particles_from_python(func, len(func), dim, &
+         nparts, lvx, lvy, lvz, time, dt, tensor_res, stat)
+    if (stat/=0) then
+      ewrite(-1, *) "Python error, Python string was:"
+      ewrite(-1 , *) trim(func)
+      FLExit("Dying")
+    end if
+    !convert tensor to array of attributes
+    do i=1,nparts
+       do j=1,dim
+          attributes(1+((j-1)*dim):dim+((j-1)*dim),i) = tensor_res(:,j,i)
+       end do
+    end do
+    deallocate(tensor_res)
+   
+  end subroutine set_particle_tensor_attribute_from_python
+
+  subroutine set_particle_tensor_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, attributes, n_oldatts, old_att_names, old_attributes, func, time, dt)
+    !!< Given a particle position, time and field values, evaluate the python function
+    !!< specified in the string func at that location. 
+    !! Func may contain any python at all but the following function must
+    !! be defined::
+    !!  def val(X,t,dt,fields)
+    !! where X is position t is the time, and fields is a dictionary where fields["FieldName"] and fields["OldFieldName" store
+    !! the interpolated value of "FieldName" at the particle position at the current and previous time levels, and fields["OldAttributeName"] stores the attribute
+    !! value at the previous time level. The result must be a float. 
+    type(detector_linked_list), intent(in) :: particle_list
+    type(state_type), dimension(:), intent(in) :: state
+    real, dimension(:,:), intent(in) :: old_attributes !Attribute values from the previous timestep
+    character, dimension(:,:), intent(in) :: old_att_names !Names of attributes stored from the previous timestep
+    real, dimension(:,:), intent(inout) :: attributes !Attribute values to be set
+    real, dimension(:,:), target, intent(in) :: positions !positions of particles
+    real, dimension(:,:), intent(in) :: lcoords !local coordinates of the particle position
+    integer, dimension(:), intent(in) :: ele !elements particles are found in
+    character(len=*), intent(in) :: func !function for attributes to be set from
+    integer, intent(in) :: nparts !number of particles
+    real, intent(in) :: time
+    real, intent(in) :: dt
+    integer, dimension(3), intent(in) :: n_oldatts
+    character, allocatable, dimension(:,:) :: field_names
+    character, allocatable, dimension(:,:) :: old_field_names
+    real, allocatable, dimension(:,:) :: field_vals
+    real, allocatable, dimension(:,:) :: old_field_vals
+    real :: value
+    real, allocatable, dimension(:) :: vvalue
+    real, allocatable, dimension(:,:) :: tvalue
+    real, dimension(:), pointer :: lvx,lvy,lvz
+    real, dimension(0), target :: zero
+    real, dimension(:,:,:), allocatable :: tensor_res
+    character(len=FIELD_NAME_LEN) :: buffer
+    type(detector_type), pointer :: particle
+    type(scalar_field), pointer :: sfield
+    type(vector_field), pointer :: vfield
+    type(tensor_field), pointer :: tfield
+    character(len=FIELD_NAME_LEN) :: name
+    integer, dimension(3) :: nfields, n_oldfields !number of scalar, vector and tensor fields
+    integer :: phase, i, j, dim
+    integer :: p, f, stat, k, pfields, l, m
+
+    nfields(:) = 0
+    n_oldfields(:) = 0
+    do phase = 1,size(state)
+       do f = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
+          if (sfield%option_path=="".or.aliased(sfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
+             nfields(1) = nfields(1) + 1
+             if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(1) = n_oldfields(1) + 1
+             end if
+          end if
+       end do
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             nfields(2) = nfields(2) + 1
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                n_oldfields(2) = n_oldfields(2) + 1
+             end if
+          end if
+       end do
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                nfields(3) = nfields(3) + 1
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   n_oldfields(3) = n_oldfields(3) + 1
+                end if
+             end if
+          end do
+       end if
+    end do
+
+    dim = size(positions(:,1))
+    select case(dim)
+    case(1)
+      lvx=>positions(1,:)
+      lvy=>zero
+      lvz=>zero
+    case(2)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>zero
+    case(3)
+      lvx=>positions(1,:)
+      lvy=>positions(2,:)
+      lvz=>positions(3,:)
+    end select
+
+    particle => particle_list%first
+
+    allocate(field_names(FIELD_NAME_LEN,sum(nfields)))
+    allocate(field_vals((nfields(1)+(dim*nfields(2))+((dim**2)*nfields(3))),nparts))
+    allocate(old_field_names(FIELD_NAME_LEN,sum(n_oldfields)))
+    allocate(old_field_vals(size(particle%old_fields),nparts))
+    allocate(vvalue(dim))
+    allocate(tvalue(dim,dim))
+    j=1
+    l=1
+    !scalar fields, then vector fields, then tensor fields
+    do phase=1,size(state)
+       do f = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase),state(phase)%scalar_names(f))
+          if (sfield%option_path=="".or.aliased(sfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
+             name=trim(state(phase)%scalar_names(f))
+             do k = 1,len_trim(name)
+                field_names(k,j)=name(k:k)
+             end do
+             field_names(k,j)= C_NULL_CHAR
+             if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                old_field_names(1,l) = 'O'
+                old_field_names(2,l) = 'l'
+                old_field_names(3,l) = 'd'
+                do k = 4,len_trim(name)+3
+                   old_field_names(k,l)=name(k-3:k-3)
+                end do
+                old_field_names(k,l)= C_NULL_CHAR
+                l=l+1
+             end if
+             do i = 1,nparts
+                value = eval_field(ele(i), sfield, lcoords(:,i))
+                field_vals(j,i)=value
+             end do
+             j=j+1
+          end if
+       end do
+    end do
+
+    j=1
+    do phase=1,size(state)
+       do f = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
+          if (vfield%option_path=="".or.aliased(vfield)) then
+             cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
+             name=trim(state(phase)%vector_names(f))
+             do k = 1,len_trim(name)
+                field_names(k,nfields(1)+j)=name(k:k)
+             end do
+             field_names(k,nfields(1)+j)= C_NULL_CHAR
+             if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                old_field_names(1,l) = 'O'
+                old_field_names(2,l) = 'l'
+                old_field_names(3,l) = 'd'
+                do k = 4,len_trim(name)+3
+                   old_field_names(k,l)=name(k-3:k-3)
+                end do
+                old_field_names(k,l)= C_NULL_CHAR
+                l=l+1
+             end if
+             do i = 1,nparts
+                vvalue = eval_field(ele(i), vfield, lcoords(:,i))
+                field_vals(nfields(1)+1+((j-1)*dim):nfields(1)+dim+((j-1)*dim),i)=vvalue(:)
+             end do
+             j=j+1
+          end if
+       end do
+    end do
+
+    j=1
+    do phase=1,size(state)
+       if (associated(state(phase)%tensor_names)) then
+          do f = 1, size(state(phase)%tensor_names)
+             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
+             if (tfield%option_path=="".or.aliased(tfield)) then
+                cycle
+             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
+                name=trim(state(phase)%tensor_names(f))
+                do k = 1,len_trim(name)
+                   field_names(k,nfields(1)+nfields(2)+j)=name(k:k)
+                end do
+                field_names(k,nfields(1)+nfields(2)+j)= C_NULL_CHAR
+                if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+                   old_field_names(1,l) = 'O'
+                   old_field_names(2,l) = 'l'
+                   old_field_names(3,l) = 'd'
+                   do k = 4,len_trim(name)+3
+                      old_field_names(k,l)=name(k-3:k-3)
+                   end do
+                   old_field_names(k,l)= C_NULL_CHAR
+                   l=l+1
+                end if
+                do i = 1,nparts
+                   tvalue = eval_field(ele(i), tfield, lcoords(:,i))
+                   do m = 1, dim
+                      field_vals(nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+1:nfields(1)+(nfields(2)*dim)+((j-1)*(dim**2))+((m-1)*dim)+dim,i)=tvalue(:,m)!!!check this
+                   end do
+                end do
+                j=j+1
+             end if
+          end do
+       end if
+    end do
+    particle => particle_list%first
+    if (allocated(particle%old_fields)) then
+       particle => particle_list%first
+       do i = 1,nparts
+          old_field_vals(:,i) = particle%old_fields
+          particle=>particle%next
+       end do
+    end if
+    
+    allocate(tensor_res(dim,dim,nparts))
+
+    call set_tensor_particles_from_python_fields(func, len(func), dim, nparts, &
+         lvx, lvy, lvz, time, dt, nfields, field_names, field_vals, n_oldfields, old_field_names, &
+         old_field_vals, n_oldatts, old_att_names, old_attributes, tensor_res, stat)
+    if (stat/=0) then
+       ewrite(-1, *) "Python error, Python string was:"
+       ewrite(-1 , *) trim(func)
+       FLExit("Dying")
+    end if
+
+    !convert tensor to array of attributes
+    do i=1,nparts
+       do j=1,dim
+          attributes(1+((j-1)*dim):dim+((j-1)*dim),i) = tensor_res(:,j,i)
+       end do
+    end do
+    
+    deallocate(field_names)
+    deallocate(field_vals)
+    deallocate(old_field_names)
+    deallocate(old_field_vals)
+    deallocate(tensor_res)
+    deallocate(vvalue)
+    deallocate(tvalue)
+    
+  end subroutine set_particle_tensor_attribute_from_python_fields
 
 end module detector_tools
