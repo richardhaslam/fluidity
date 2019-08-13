@@ -1078,13 +1078,18 @@ void set_scalar_particles_from_python(char *function, int *function_len, int *di
 }
 
 //#define set_scalar_particles_from_python_fields F77_FUNC(set_scalar_particles_from_python_fields, SET_SCALAR_PARTICLES_FROM_PYTHON_FIELDS)
-void set_scalar_particles_from_python_fields(char *function, int *function_len, int *dim, int *ndete,
-				      double x[], double y[], double z[], double *t, double *dt,
-				      int *FIELD_NAME_LEN, int nfields[], char field_names[nfields[0]+nfields[1]+nfields[2]][*FIELD_NAME_LEN],
-				      double field_vals[], int old_nfields[], char old_field_names[old_nfields[0]+old_nfields[1]+old_nfields[2]][*FIELD_NAME_LEN],
-				      double old_field_vals[], int old_nattributes[],
-				      char old_att_names[old_nattributes[0]+old_nattributes[1]+old_nattributes[2]][*FIELD_NAME_LEN],
-				      double old_attributes[], double result[], int* stat)
+void set_scalar_particles_from_python_fields(char *function, int function_len, int dim, int ndete,
+				      double x[], double y[], double z[], double t, double dt,
+				      int FIELD_NAME_LEN, int nfields[],
+				      char field_names[nfields[0]+nfields[1]+nfields[2]][FIELD_NAME_LEN],
+				      double field_vals[ndete][nfields[0]+dim*nfields[1]+dim*dim*nfields[2]],
+				      int old_nfields[],
+				      char old_field_names[old_nfields[0]+old_nfields[1]+old_nfields[2]][FIELD_NAME_LEN],
+				      double old_field_vals[ndete][old_nfields[0]+dim*old_nfields[1]+dim*dim*old_nfields[2]],
+				      int old_nattributes[],
+				      char old_att_names[old_nattributes[0]+old_nattributes[1]+old_nattributes[2]][FIELD_NAME_LEN],
+				      double old_attributes[ndete][old_nattributes[0]+dim*old_nattributes[1]+dim*dim*old_nattributes[2]],
+				      double result[], int* stat)
   
 {
 #ifndef HAVE_PYTHON
@@ -1102,40 +1107,38 @@ void set_scalar_particles_from_python_fields(char *function, int *function_len, 
   PyObject *pMain, *pGlobals, *pLocals, *pFunc, *pCode, *pResult,
     *pArgs, *pPos, *px, *pT, *pdT, *pField, *pNames;
   PyObject *vec, *tens;
-  double *pvField = malloc(sizeof(double[*dim]));
-  double *ptField = malloc(sizeof(double[*dim * *dim]));
   char *function_c;
   int i, j, k, l;
-  int *dims[] = {*dim, *dim};
+  npy_intp dims[] = {dim, dim};
   import_array();
-    
+
   // the function string passed down from Fortran needs terminating,
   // so make a copy and fiddle with it (remember to free it)
-  function_c = (char *)malloc(*function_len+3);
-  memcpy( function_c, function, *function_len );
-  function_c[*function_len] = 0;
+  function_c = (char *)malloc(function_len+1);
+  memcpy(function_c, function, function_len);
+  function_c[function_len] = 0;
 
   // Get a reference to the main module and global dictionary
   pMain = PyImport_AddModule("__main__");
 
   pGlobals = PyModule_GetDict(pMain);
   // Global and local namespace dictionaries for our code.
-  pLocals=PyDict_New();
-  
+  pLocals = PyDict_New();
+
   // Execute the user's code.
-  pCode=PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
+  pCode = PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
 
   // Extract the function from the code.
-  pFunc=PyDict_GetItemString(pLocals, "val");
+  pFunc = PyDict_GetItemString(pLocals, "val");
   if (pFunc == NULL) {
       printf("Couldn't find a 'val' function in your Python code.\n");
       *stat=1;
       return;
   }
-  
+
   // Clean up memory from null termination.
   free(function_c);
-  
+
   // Check for errors in executing user code.
   if (PyErr_Occurred()){
     PyErr_Print();
@@ -1143,159 +1146,160 @@ void set_scalar_particles_from_python_fields(char *function, int *function_len, 
     return;
   }
 
+  // allocate Python object for function arguments
   // Field variable dictionary space
-  pNames=PyDict_New();
-
+  pNames = PyDict_New();
   // Python form of time variable.
-  pT=PyFloat_FromDouble(*t);
-
+  pT = PyFloat_FromDouble(t);
   // Python form of timestep variable.
-  pdT=PyFloat_FromDouble(*dt);
-
+  pdT = PyFloat_FromDouble(dt);
   // Tuple containing the current position vector.
-  pPos=PyTuple_New(*dim);
-  
+  pPos = PyTuple_New(dim);
+
   // Tuple of arguments to function;
-  pArgs=PyTuple_New(4);
+  pArgs = PyTuple_New(4);
   PyTuple_SetItem(pArgs, 3, pNames);
   PyTuple_SetItem(pArgs, 2, pdT);
   PyTuple_SetItem(pArgs, 1, pT);
   PyTuple_SetItem(pArgs, 0, pPos);
 
   //loop over all particles
-  
-  for (i = 0; i < *ndete; i++)
+  for (i = 0; i < ndete; i++)
     {
-      
       // Set values for position vector.
-      px=PyFloat_FromDouble(x[i]);
+      px = PyFloat_FromDouble(x[i]);
       PyTuple_SetItem(pPos, 0, px);
-      
-      if (*dim>1) {
-	px=PyFloat_FromDouble(y[i]);
+
+      if (dim>1) {
+	px = PyFloat_FromDouble(y[i]);
 	PyTuple_SetItem(pPos, 1, px);
-	
-	if (*dim>2) {
-	  px=PyFloat_FromDouble(z[i]);
+
+	if (dim>2) {
+	  px = PyFloat_FromDouble(z[i]);
 	  PyTuple_SetItem(pPos, 2, px);
 	}
       }
-      
-      //Set values for fields library.
 
+      //Set values for fields dictionary
       //Set field values (scalar, then vector, then tensor)
       for (j=0; j < nfields[0]; j++)//scalar fields
       	{
-      	  pField=PyFloat_FromDouble(field_vals[i * (nfields[0]+(*dim * nfields[1])+(*dim * *dim * nfields[2])) + j]);
+      	  pField = PyFloat_FromDouble(field_vals[i][j]);
       	  PyDict_SetItemString(pNames, field_names[j], pField);
       	}
 
       for (j=0; j < nfields[1]; j++)//vector fields
       	{
-      	  for (k=0; k < *dim; k++)
+	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      pvField[k]=field_vals[i * (nfields[0]+(*dim * nfields[1])+(*dim * *dim * nfields[2])) + nfields[0] + (j * *dim) + k];
+      	      ((double*)PyArray_DATA(vec))[k] = field_vals[i][nfields[0] + (j*dim) + k];
       	    }
-      	  vec=PyArray_SimpleNewFromData(1,dim,NPY_DOUBLE,pvField);
-      	  PyDict_SetItemString(pNames, field_names[j+nfields[0]], vec);
+      	  PyDict_SetItemString(pNames, field_names[j + nfields[0]], vec);
+	  Py_DECREF(vec);
       	}
-      
+
       for (j=0; j < nfields[2]; j++)//tensor fields
       	{
-      	  for (k=0; k < *dim; k++)
+	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      for (l=0; l < *dim; l++)
+      	      for (l=0; l < dim; l++)
       		{
 		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ptField[k+(l * *dim)]=field_vals[i * (nfields[0]+(*dim * nfields[1])+(*dim * *dim * nfields[2])) + nfields[0] + (nfields[1] * *dim) + (j * *dim * *dim) + (k * *dim) + l];
+      		  ((double*)PyArray_DATA(tens))[k + l*dim] = field_vals[i][nfields[0] + nfields[1]*dim + (j*dim*dim) + (k*dim) + l];
       		}
       	    }
-	   tens = PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, ptField);
 	   PyDict_SetItemString(pNames, field_names[j + nfields[0] + nfields[1]], tens);
+	   Py_DECREF(tens);
       	}
 
 
       //Set old_field values (scalar, then vector, then tensor)
       for (j=0; j < old_nfields[0]; j++)//scalar old_fields
       	{
-      	  pField=PyFloat_FromDouble(old_field_vals[i * (old_nfields[0]+(*dim * old_nfields[1])+(*dim * *dim * old_nfields[2])) + j]);
+      	  pField = PyFloat_FromDouble(old_field_vals[i][j]);
       	  PyDict_SetItemString(pNames, old_field_names[j], pField);
       	}
 
       for (j=0; j < old_nfields[1]; j++)//vector old_fields
       	{
-      	  for (k=0; k < *dim; k++)
+	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      pvField[k]=old_field_vals[i * (old_nfields[0]+(*dim * old_nfields[1])+(*dim * *dim * old_nfields[2])) + old_nfields[0] + (j * *dim) + k];
+      	      ((double*)PyArray_DATA(vec))[k] = old_field_vals[i][old_nfields[0] + (j*dim) + k];
       	    }
-	  vec=PyArray_SimpleNewFromData(1,dim,NPY_DOUBLE,pvField);
 	  PyDict_SetItemString(pNames, old_field_names[j+old_nfields[0]], vec);
+	  Py_DECREF(vec);
       	}
-      
+
       for (j=0; j < old_nfields[2]; j++)//tensor old_fields
       	{
-      	  for (k=0; k < *dim; k++)
+	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      for (l=0; l < *dim; l++)
+      	      for (l=0; l < dim; l++)
       		{
 		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ptField[k+(l * *dim)]=old_field_vals[i * (old_nfields[0]+(*dim * old_nfields[1])+(*dim * *dim * old_nfields[2])) + old_nfields[0] + (old_nfields[1] * *dim) + (j * *dim * *dim) + (k * *dim) + l];
+      		  ((double*)PyArray_DATA(tens))[k + l*dim] = old_field_vals[i][old_nfields[0] + old_nfields[1]*dim + (j*dim*dim) + (k*dim) + l];
       		}
       	    }
-	  tens = PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, ptField);
 	  PyDict_SetItemString(pNames, old_field_names[j + old_nfields[0] + old_nfields[1]], tens);
+	  Py_DECREF(tens);
       	}
 
       //Set old_attribute values (scalar, then vector, then tensor)
       for (j=0; j < old_nattributes[0]; j++)//scalar old_attributes
       	{
-      	  pField=PyFloat_FromDouble(old_attributes[i * (old_nattributes[0]+(*dim * old_nattributes[1])+(*dim * *dim * old_nattributes[2])) + j]);
+      	  pField = PyFloat_FromDouble(old_attributes[i][j]);
       	  PyDict_SetItemString(pNames, old_att_names[j], pField);
       	}
 
       for (j=0; j < old_nattributes[1]; j++)//vector old_attributes
       	{
-      	  for (k=0; k < *dim; k++)
+	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      pvField[k]=old_attributes[i * (old_nattributes[0]+(*dim * old_nattributes[1])+(*dim * *dim * old_nattributes[2])) + old_nattributes[0] + (j * *dim) + k];
+      	      ((double*)PyArray_DATA(vec))[k] = old_attributes[i][old_nattributes[0] + (j*dim) + k];
       	    }
 
-	  vec=PyArray_SimpleNewFromData(1,dim,NPY_DOUBLE,pvField);
 	  PyDict_SetItemString(pNames, old_att_names[j+old_nattributes[0]], vec);
+	  Py_DECREF(vec);
       	}
-      
+
       for (j=0; j < old_nattributes[2]; j++)//tensor old_attributes
       	{
-      	  for (k=0; k < *dim; k++)
+	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
+      	  for (k=0; k < dim; k++)
       	    {
-      	      for (l=0; l < *dim; l++)
+      	      for (l=0; l < dim; l++)
       		{
 		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ptField[k+(l * *dim)]=old_attributes[i * (old_nattributes[0]+(*dim * old_nattributes[1])+(*dim * *dim * old_nattributes[2])) + old_nattributes[0] + (old_nattributes[1] * *dim) + (j * *dim * *dim) + (k * *dim) + l];
+      		  ((double*)PyArray_DATA(tens))[k + l*dim] = old_attributes[i][old_nattributes[0] + old_nattributes[1]*dim + (j*dim*dim) + (k*dim) + l];
       		}
       	    }
-	  tens = PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, ptField);
 	  PyDict_SetItemString(pNames, old_att_names[j + old_nattributes[0] + old_nattributes[1]], tens);
+	  Py_DECREF(tens);
       	}
-      
+
       // Check for a Python error in the function call
       if (PyErr_Occurred()){
 	PyErr_Print();
 	*stat=1;
 	return;
       }
-      
+
       pResult=PyObject_CallObject(pFunc, pArgs);
-      
+
       // Check for a Python error in the function call
       if (PyErr_Occurred()){
 	PyErr_Print();
 	*stat=1;
 	return;
       }
-      
+
       result[i]=PyFloat_AsDouble(pResult);
-      
+
       // Check for a Python error in result.
       if (PyErr_Occurred()){
 	PyErr_Print();
@@ -1305,21 +1309,16 @@ void set_scalar_particles_from_python_fields(char *function, int *function_len, 
 
     }
   Py_DECREF(pResult);
-  
+
   // Clean up
   Py_DECREF(pArgs);
   Py_DECREF(pLocals);
   Py_DECREF(pCode);
+  Py_DECREF(pNames);
 
-  //Free allocated memory
-  free(ptField);
-  free(pvField);
-  Py_DECREF(tens);
-  Py_DECREF(vec);
-  
   // Force a garbage collection
   PyGC_Collect();
-  
+
   *stat=0;
   return;
 #endif
