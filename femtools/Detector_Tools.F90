@@ -175,8 +175,6 @@ contains
        end if
        detector%next => null()
        detector%previous => null()
-       detector%temp_next => null()
-       detector%temp_previous => null()
        deallocate(detector)
     end if
     detector => null()

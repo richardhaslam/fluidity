@@ -344,7 +344,7 @@ contains
     end if
 
     call initialise_diagnostics(filename, state)
-    call initialise_particles(filename, state)
+    call initialise_particle_positions(filename, state)
 
     ! Initialise ice_meltrate, read constatns, allocate surface, and calculate melt rate
     if (have_option("/ocean_forcing/iceshelf_meltrate/Holland08")) then
