@@ -127,7 +127,7 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
   // Create Python objects for function arguments
   pT = PyFloat_FromDouble(t);
   pPos = PyTuple_New(dim);
-  pArgs = PyTuple_New(2);
+  pArgs = PyTuple_New(dt == NULL ? 2 : 3);
   // note that PyTuple_SetItem steals refs, so we don't have to decrement
   // the refcounts of pT or pPos
   PyTuple_SetItem(pArgs, 0, pPos);
