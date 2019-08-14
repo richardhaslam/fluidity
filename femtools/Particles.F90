@@ -86,9 +86,6 @@ contains
     integer :: totaldet_global
     logical :: from_file, do_output
     integer :: n_oldfields, phase, f
-    type(scalar_field), pointer :: sfield
-    type(vector_field), pointer :: vfield
-    type(tensor_field), pointer :: tfield
 
     ewrite(2,*) "In initialise_particles"
 
@@ -121,37 +118,21 @@ contains
     call get_option("/geometry/dimension", dim)
     call get_option("/timestepping/current_time", current_time)
 
+    ! count the number of old fields to store on particles
+    n_oldfields = &
+         + option_count("/material_phase/scalar_field/prescribed/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/scalar_field/diagnostic/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/scalar_field/prognostic/particles/include_in_particles/store_old_field")
 
-    ! Number of old_fields stored on particles
-    n_oldfields = 0
-    do phase = 1,size(state)
-       do f = 1, size(state(phase)%scalar_names)
-          sfield => extract_scalar_field(state(phase), state(phase)%scalar_names(f))
-          if (sfield%option_path=="" .or. aliased(sfield)) then
-             cycle
-          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-             n_oldfields = n_oldfields+1
-          end if
-       end do
-       do f = 1, size(state(phase)%vector_names)
-          vfield => extract_vector_field(state(phase),state(phase)%vector_names(f))
-          if (vfield%option_path=="" .or. aliased(vfield)) then
-             cycle
-          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-             n_oldfields = n_oldfields+dim
-          end if
-       end do
-       if (associated(state(phase)%tensor_names)) then
-          do f = 1, size(state(phase)%tensor_names)
-             tfield => extract_tensor_field(state(phase),state(phase)%tensor_names(f))
-             if (tfield%option_path=="" .or. aliased(tfield)) then
-                cycle
-             else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-                n_oldfields = n_oldfields+(dim**2)
-             end if
-          end do
-       end if
-    end do
+    n_oldfields = n_oldfields &
+         + option_count("/material_phase/vector_field/prescribed/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/vector_field/diagnostic/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/vector_field/prognostic/particles/include_in_particles/store_old_field")
+
+    n_oldfields = n_oldfields &
+         + option_count("/material_phase/tensor_field/prescribed/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/tensor_field/diagnostic/particles/include_in_particles/store_old_field") &
+         + option_count("/material_phase/tensor_field/prognostic/particles/include_in_particles/store_old_field")
 
     list_counter = 1
     do i = 1,particle_groups
@@ -981,7 +962,6 @@ contains
     integer, dimension(3) :: attribute_dims
     integer :: i, k, dim
     integer :: particle_groups, particle_subgroups, list_counter
-    integer :: s_att, v_att, t_att, tot_atts
     integer, dimension(:), allocatable :: particle_arrays
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path
     logical :: output_group
@@ -1123,9 +1103,9 @@ contains
     character(len=OPTION_PATH_LEN) :: lpostfix
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path, subgroup_path_name, name
 
-    integer, dimension(3) :: attribute_size
-    integer :: nscalar, nvector, ntensor
-    integer :: s_att, v_att, t_att, tot_atts
+    integer, dimension(3) :: attributes, old_attributes
+    logical :: old_fields
+    integer :: nscalar, nvector, ntensor, tot_fields
     integer :: i, m, k, particle_groups, particle_subgroups, list_counter, dim
 
     integer :: output_comm, world_group, output_group, ierr
@@ -1164,6 +1144,8 @@ contains
     + option_count('/material_phase/tensor_field/prescribed/particles/include_in_particles/store_old_field') &
     + option_count('/material_phase/tensor_field/diagnostic/particles/include_in_particles/store_old_field')
 
+    tot_fields = nscalar + dim*nvector + dim*dim*ntensor
+
     list_counter = 1
     do i = 1, particle_groups
       group_path = "/particles/particle_group["//int2str(i-1)//"]"
@@ -1181,44 +1163,45 @@ contains
          end if
 
          ! count number of attributes in this subgroup
-         attribute_size(:) = 0
-         s_att = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
-         v_att = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
-         t_att = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
-         attribute_size(1) = s_att + dim*v_att + (dim**2)*t_att
+         attributes(1) = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
+         attributes(2) = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
+         attributes(3) = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
 
-         ! Get attribute size of old_fields and old_attributes
-         do m = 1,s_att
-           if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-             attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
+         ! Get number of old fields and old attributes
+         old_attributes(:) = 0
+         old_fields = .false.
+         do m = 1, attributes(1)
+           if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields")) then
+             old_fields = .true.
              if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               attribute_size(2)=attribute_size(2)+1
+               old_attributes(1) = old_attributes(1) + 1
              end if
            end if
          end do
-         do m = 1,v_att
-           if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-             attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
+         do m = 1,attributes(2)
+           if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields")) then
+             old_fields = .true.
              if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               attribute_size(2)=attribute_size(2)+dim
+               old_attributes(2) = old_attributes(2) + 1
              end if
            end if
          end do
-         do m = 1,t_att
-           if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-             attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
+         do m = 1,attributes(3)
+           if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields")) then
+             old_fields = .true.
              if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               attribute_size(2)=attribute_size(2)+(dim**2)
+               old_attributes(3) = old_attributes(3) + 1
              end if
            end if
          end do
          call get_option(trim(subgroup_path) // "/name", name)
-         tot_atts = s_att + v_att + t_att
          call checkpoint_particles_subgroup(state, prefix, lpostfix, cp_no, particle_lists(list_counter), &
-              attribute_size, name, subgroup_path, subgroup_path_name, output_comm)
+              attributes, old_attributes, tot_fields, name, subgroup_path, subgroup_path_name, output_comm)
           list_counter = list_counter + 1
        end do
      end do
+
+     if (.not. old_fields) tot_fields = 0
 
      if (present(number_of_partitions)) then
        call mpi_comm_free(output_comm, ierr)
@@ -1226,7 +1209,8 @@ contains
      end if
   end subroutine checkpoint_particles_loop
 
-  subroutine checkpoint_particles_subgroup(state, prefix, lpostfix, cp_no, particle_list, attribute_size, name, subgroup_path, subgroup_path_name, output_comm)
+  subroutine checkpoint_particles_subgroup(state, prefix, lpostfix, cp_no, particle_list, &
+       attributes, old_attributes, tot_fields, name, subgroup_path, subgroup_path_name, output_comm)
     !!<Checkpoint Particles
 
     type(state_type), dimension(:), intent(in) :: state
@@ -1237,19 +1221,23 @@ contains
     character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path, subgroup_path_name
 
     type(detector_linked_list), intent(inout) :: particle_list
-    integer, dimension(3), intent(in) :: attribute_size
+    integer, dimension(3), intent(in) :: attributes, old_attributes
+    integer, intent(in) :: tot_fields
 
     integer, optional, intent(in) :: output_comm !! MPI communicator to use for output/collectives
 
     character(len=OPTION_PATH_LEN) :: particles_cp_filename
     character(len=FIELD_NAME_LEN) :: attname
-    integer :: i, j, dim, old_attrib, old_field, commsize, ierr
+    integer :: i, j, k, dim, att, old_attrib, old_field, commsize, ierr
+    integer :: tot_attribs, tot_old_attribs
+    integer :: phase, field
     integer(kind=8) :: h5_id, h5_prop, h5_ierror
     integer(kind=8), dimension(:), allocatable :: npoints
     real, dimension(:,:), allocatable :: positions, attrib_data, old_attrib_data, old_field_data
     integer, dimension(:), allocatable :: node_ids
     type(vector_field), pointer :: vfield
     type(scalar_field), pointer :: sfield
+    type(tensor_field), pointer :: tfield
     type(detector_type), pointer :: node
 
     integer :: comm
@@ -1289,12 +1277,15 @@ contains
     vfield => extract_vector_field(state(1), "Coordinate")
     dim = vfield%dim
 
+    tot_attribs = attributes(1) + dim*attributes(2) + dim*dim*attributes(3)
+    tot_old_attribs = old_attributes(1) + dim*old_attributes(2) + dim*dim*old_attributes(3)
+
     ! allocate arrays for node data
     allocate(positions(particle_list%length, dim))
-    allocate(attrib_data(particle_list%length, attribute_size(1)))
     allocate(node_ids(particle_list%length))
-    allocate(old_attrib_data(particle_list%length, attribute_size(2)))
-    allocate(old_field_data(particle_list%length, attribute_size(3)))
+    allocate(attrib_data(particle_list%length, tot_attribs))
+    allocate(old_attrib_data(particle_list%length, tot_old_attribs))
+    allocate(old_field_data(particle_list%length, tot_fields))
 
     node => particle_list%first
     positionloop_cp: do i = 1, particle_list%length
@@ -1302,11 +1293,11 @@ contains
       assert(size(node%position) == dim)
 
       positions(i,:) = node%position(:)
-      if (attribute_size(1) /= 0) &
+      if (tot_attribs /= 0) &
            attrib_data(i,:) = node%attributes(:)
-      if (attribute_size(2) /= 0) &
+      if (tot_old_attribs /= 0) &
            old_attrib_data(i,:) = node%old_attributes(:)
-      if (attribute_size(3) /= 0) &
+      if (tot_fields /= 0) &
            old_field_data(i,:) = node%old_fields(:)
 
       ! collect node ids
@@ -1325,40 +1316,102 @@ contains
 
     h5_ierror = h5pt_writedata_i4(h5_id, "id", node_ids(:))
 
-    old_attrib = 0
-
-    if (attribute_size(1) /= 0) then
-      attribute_loop: do i = 1, attribute_size(1)
-        call get_option(trim(subgroup_path) // "/attributes/attribute["//int2str(i-1)//"]/name", attname)
-        h5_ierror = h5pt_writedata_r8(h5_id, trim(attname), attrib_data(:,i))
+    ! attributes and old attributes
+    if (tot_attribs /= 0) then
+      att = 0
+      old_attrib = 0
+      scalar_attribute_loop: do i = 1, attributes(1)
+        call get_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(i-1)//"]/name", attname)
+        att = att + 1
+        h5_ierror = h5pt_writedata_r8(h5_id, trim(attname), attrib_data(:,att))
 
         ! collapse in old attribute loop
-        if (have_option(trim(subgroup_path) // "/attributes/attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
+        if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
           old_attrib = old_attrib + 1
           h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname), old_attrib_data(:,old_attrib))
         end if
-      end do attribute_loop
+      end do scalar_attribute_loop
+
+      vector_attribute_loop: do i = 1, attributes(2)
+        call get_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(i-1)//"]/name", attname)
+        do j = 1, dim
+          att = att + 1
+          h5_ierror = h5pt_writedata_r8(h5_id, trim(attname)//"_"//int2str(j), attrib_data(:,att))
+        end do
+
+        if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
+          do j = 1, dim
+            old_attrib = old_attrib + 1
+            h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname)//"_"//int2str(j), old_attrib_data(:,old_attrib))
+          end do
+        end if
+      end do vector_attribute_loop
+
+      tensor_attribute_loop: do i = 1, attributes(3)
+        call get_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(i-1)//"]/name", attname)
+        do j = 1, dim
+          do k = 1, dim
+            att = att + 1
+            h5_ierror = h5pt_writedata_r8(h5_id, trim(attname)//"_"//int2str(j)//int2str(k), attrib_data(:,att))
+          end do
+        end do
+
+        if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
+          do j = 1, dim
+            do k = 1, dim
+              old_attrib = old_attrib + 1
+              h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname)//"_"//int2str(j)//int2str(k), old_attrib_data(:,old_attrib))
+            end do
+          end do
+        end if
+      end do tensor_attribute_loop
     end if
-    assert(old_attrib == attribute_size(2))
+    assert(old_attrib == tot_old_attribs)
 
     old_field = 0
-    if (attribute_size(3) /= 0) then
-      do i = 1, size(state)
-        do j = 1, size(state(i)%scalar_names)
-          sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
+    if (tot_fields /= 0) then
+      do phase = 1, size(state)
+        scalar_field_loop: do field = 1, size(state(phase)%scalar_names)
+          sfield => extract_scalar_field(state(phase), state(i)%scalar_names(field))
           if (sfield%option_path == "" .or. aliased(sfield)) then
             cycle
           else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
             old_field = old_field + 1
             h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%scalar_names(j)), old_field_data(:,old_field))
           end if
-        end do
+        end do scalar_field_loop
+
+        vector_field_loop: do field = 1, size(state(phase)%vector_names)
+          vfield => extract_vector_field(state(phase), state(i)%vector_names(field))
+          if (vfield%option_path == "" .or. aliased(vfield)) then
+            cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+            do j = 1, dim
+              old_field = old_field + 1
+              h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%vector_names(j))//"_"//int2str(j), old_field_data(:,old_field))
+            end do
+          end if
+        end do vector_field_loop
+
+        tensor_field_loop: do field = 1, size(state(phase)%tensor_names)
+          tfield => extract_tensor_field(state(phase), state(i)%tensor_names(field))
+          if (tfield%option_path == "" .or. aliased(tfield)) then
+            cycle
+          else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+            do j = 1, dim
+              do k = 1, dim
+                old_field = old_field + 1
+                h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%tensor_names(j))//"_"//int2str(j)//int2str(k), old_field_data(:,old_field))
+              end do
+            end do
+          end if
+        end do tensor_field_loop
       end do
     end if
-    assert(old_field == attribute_size(3))
+    assert(old_field == tot_fields)
 
     ! update schema file to read this subgroup from the checkpoint file
-    call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, attribute_size(1), subgroup_path_name)
+    call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, tot_attribs, subgroup_path_name)
 
     deallocate(old_field_data)
     deallocate(old_attrib_data)
