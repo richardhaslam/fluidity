@@ -45,6 +45,55 @@ USA
 #include "numpy/arrayobject.h"
 #endif
 
+int eval_user_func(char *function, int function_len, PyObject *pLocals, PyObject **pFunc) {
+  PyObject *pMain, *pGlobals, *pCode;
+  char *function_c;
+
+  // the function string passed down from Fortran needs terminating,
+  // so make a copy and fiddle with it (remember to free it)
+  function_c = (char *)malloc(function_len+1);
+  memcpy(function_c, function, function_len);
+  function_c[function_len] = 0;
+
+  // Get a reference to the main module and global dictionary
+  pMain = PyImport_AddModule("__main__");
+  pGlobals = PyModule_GetDict(pMain);
+
+  // Execute the user's code and clean up allocated string.
+  pCode = PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
+  free(function_c);
+  Py_DECREF(pCode);
+
+  // Extract the function from the code.
+  *pFunc = PyDict_GetItemString(pLocals, "val");
+  if (*pFunc == NULL) {
+      printf("Couldn't find a 'val' function in your Python code.\n");
+      return 1;
+  }
+
+  // Check for errors in executing user code.
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    return 1;
+  }
+
+  return 0;
+}
+
+static inline void set_pos_tuple(int i, int dim, PyObject *pPos, double *x, double *y, double *z) {
+  PyObject *px;
+  px = PyFloat_FromDouble(x[i]);
+  PyTuple_SetItem(pPos, 0, px);
+  if (dim > 1) {
+    px = PyFloat_FromDouble(y[i]);
+    PyTuple_SetItem(pPos, 1, px);
+  }
+  if (dim > 2) {
+    px = PyFloat_FromDouble(z[i]);
+    PyTuple_SetItem(pPos, 2, px);
+  }
+}
+
 void set_field_from_python(char *function, int function_len, int dim, int nodes,
 			   double *x, double *y, double *z, double t, double *dt,
 			   int *stat, int *result_dim, void **result,
@@ -63,38 +112,14 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
   return;
 #else
 
-  PyObject *pMain, *pGlobals, *pLocals, *pFunc, *pCode, *pResult,
-    *pArgs, *pPos, *px, *pT, *pDT;
-  char *function_c;
+  PyObject *pFunc, *pLocals, *pResult, *pArgs, *pPos, *pT, *pdT;
   int i, res;
 
-  // the function string passed down from Fortran needs terminating,
-  // so make a copy and fiddle with it (remember to free it)
-  function_c = (char *)malloc(function_len+1);
-  memcpy(function_c, function, function_len);
-  function_c[function_len] = 0;
-
-  // Get a reference to the main module and global dictionary
-  pMain = PyImport_AddModule("__main__");
-  pGlobals = PyModule_GetDict(pMain);
   // Global and local namespace dictionaries for our code.
   pLocals = PyDict_New();
 
-  // Execute the user's code and clean up allocated string.
-  pCode = PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
-  free(function_c);
-
-  // Extract the function from the code.
-  pFunc = PyDict_GetItemString(pLocals, "val");
-  if (pFunc == NULL) {
-      printf("Couldn't find a 'val' function in your Python code.\n");
-      *stat = 1;
-      return;
-  }
-
-  // Check for errors in executing user code.
-  if (PyErr_Occurred()) {
-    PyErr_Print();
+  // load the user's function as a Python object -- borrows locals
+  if (eval_user_func(function, function_len, pLocals, &pFunc)) {
     *stat = 1;
     return;
   }
@@ -110,8 +135,8 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
 
   // particle routines need dt too
   if (dt != NULL) {
-    pDT = PyFloat_FromDouble(*dt);
-    PyTuple_SetItem(pArgs, 2, pDT);
+    pdT = PyFloat_FromDouble(*dt);
+    PyTuple_SetItem(pArgs, 2, pdT);
   }
 
   // Check for a Python error in the function call
@@ -123,19 +148,7 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
 
   // populate position tuple
   for (i = 0; i < nodes; i++) {
-    px = PyFloat_FromDouble(x[i]);
-    PyTuple_SetItem(pPos, 0, px);
-
-    if (dim > 1) {
-      px = PyFloat_FromDouble(y[i]);
-      PyTuple_SetItem(pPos, 1, px);
-
-      if (dim > 2) {
-        px = PyFloat_FromDouble(z[i]);
-        PyTuple_SetItem(pPos, 2, px);
-      }
-    }
-
+    set_pos_tuple(i, dim, pPos, x, y, z);
     pResult = PyObject_CallObject(pFunc, pArgs);
 
     // Check for a Python error in the function call
@@ -161,7 +174,6 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
   }
 
   // clean up
-  Py_DECREF(pCode);
   Py_DECREF(pArgs);
   Py_DECREF(pLocals);
   PyGC_Collect();
@@ -169,9 +181,10 @@ void set_field_from_python(char *function, int function_len, int dim, int nodes,
   #endif
 }
 
-int set_scalar_result_double(int i, int *dim, double **result, PyObject *pResult)
+int set_scalar_result_double(int i, int *dim, void **_result, PyObject *pResult)
 {
-  *result[i] = PyFloat_AsDouble(pResult);
+  double *result = *(double**)_result;
+  result[i] = PyFloat_AsDouble(pResult);
   return 0;
 }
 
@@ -181,7 +194,7 @@ void set_scalar_field_from_python(char *function, int function_len, int dim,
 				  double *result, int *stat)
 {
   set_field_from_python(function, function_len, dim, nodes, x, y, z, t, NULL, stat,
-			NULL, &result, set_scalar_result_double);
+			NULL, (void**)&result, set_scalar_result_double);
 }
 
 #define set_scalar_particles_from_python F77_FUNC(set_scalar_particles_from_python, SET_SCALAR_PARTICLES_FROM_PYTHON)
@@ -190,12 +203,13 @@ void set_scalar_particles_from_python(char *function, int function_len, int dim,
 				      double *result, int *stat)
 {
   set_field_from_python(function, function_len, dim, ndete, x, y, z, t, &dt, stat,
-			NULL, &result, set_scalar_result_double);
+			NULL, (void**)&result, set_scalar_result_double);
 }
 
-int set_scalar_result_integer(int i, int *dim, int **result, PyObject *pResult)
+int set_scalar_result_integer(int i, int *dim, void **_result, PyObject *pResult)
 {
-  *result[i] = PyLong_AsLong(pResult);
+  int *result = *(int**)_result;
+  result[i] = PyLong_AsLong(pResult);
   return 0;
 }
 
@@ -205,21 +219,21 @@ void set_integer_array_from_python(char* function, int function_len, int dim,
                                    int* result, int* stat)
 {
   set_field_from_python(function, function_len, dim, nodes, x, y, z, t, NULL, stat,
-			NULL, &result, set_scalar_result_integer);
+			NULL, (void**)&result, set_scalar_result_integer);
 }
 
-int set_vector_result_double(int i, int *dim, double **result, PyObject *pResult)
+int set_vector_result_double(int i, int *dim, void **result, PyObject *pResult)
 {
   if (PyObject_Length(pResult) != *dim) {
       fprintf(stderr, "Error: length of object returned from python (%d) does not match the allocated dimension of the vector field (%d).\n",
-              PyObject_Length(pResult), *dim);
+              (int)PyObject_Length(pResult), *dim);
       return 1;
   }
 
   PyObject *px;
   for (int d = 0; d < *dim; d++) {
     px = PySequence_GetItem(pResult, d);
-    result[d][i] = PyFloat_AsDouble(px);
+    ((double**)result)[d][i] = PyFloat_AsDouble(px);
     Py_DECREF(px);
   }
 
@@ -235,10 +249,19 @@ void set_vector_field_from_python(char *function, int function_len, int dim,
   double *results[] = {result_x, result_y, result_z};
 
   set_field_from_python(function, function_len, dim, nodes, x, y, z, t, NULL, stat,
-			&result_dim, &results, set_vector_result_double);
+			&result_dim, (void**)results, set_vector_result_double);
 }
 
-int set_tensor_result_double(int i, int *dim, double **result, PyObject *pResult)
+#define set_vector_particles_from_python F77_FUNC(set_vector_particles_from_python, SET_VECTOR_PARTICLES_FROM_PYTHON)
+void set_vector_particles_from_python(char *function, int function_len, int dim,
+				      int ndete, double *x, double *y, double *z, double t, double dt,
+				      double **result, int *stat)
+{
+  set_field_from_python(function, function_len, dim, ndete, x, y, z, t, &dt, stat,
+			&dim, (void**)result, set_vector_result_double);
+}
+
+int set_tensor_result_double(int i, int *dim, void **result, PyObject *pResult)
 {
   PyArrayObject *pArray;
 
@@ -256,7 +279,7 @@ int set_tensor_result_double(int i, int *dim, double **result, PyObject *pResult
 
   for (int ii = 0; ii < dim[0]; ii++) {
     for (int jj = 0; jj < dim[1]; jj++) {
-      *result[i*(dim[0]+dim[1]) + jj*dim[0] + ii] = *((double*)PyArray_GETPTR2(pArray, ii, jj));
+      *((double**)result)[i*(dim[0]+dim[1]) + jj*dim[0] + ii] = *((double*)PyArray_GETPTR2(pArray, ii, jj));
     }
   }
   Py_DECREF(pArray);
@@ -282,9 +305,150 @@ void set_tensor_field_from_python(char *function, int function_len, int dim,
   import_array();
 
   set_field_from_python(function, function_len, dim, nodes, x, y, z, t, NULL, stat,
-			result_dim, &result, set_tensor_result_double);
+			result_dim, (void**)&result, set_tensor_result_double);
 
 #endif
+}
+
+static inline void set_dict_from_fields(int i, int dim, int *nfields, int name_len, char *_field_names, double *_field_vals,
+			  PyObject *pNames)
+{
+  int all_fields = nfields[0] + dim*nfields[1] + dim*dim*nfields[2];
+  double (*field_vals)[all_fields] = (double (*)[all_fields])_field_vals;
+  char (*field_names)[name_len] = (char (*)[name_len])_field_names;
+
+  // for creation of numpy arrays of the right size
+  npy_intp dims[] = {dim, dim};
+
+  // set values for fields dictionary
+  for (int j = 0; j < nfields[0]; j++) {
+    // scalar fields
+    PyObject *pField = PyFloat_FromDouble(field_vals[i][j]);
+    PyDict_SetItemString(pNames, field_names[j], pField);
+    Py_DECREF(pField);
+  }
+
+  for (int j = 0; j < nfields[1]; j++) {
+    // vector fields
+    PyObject *pVec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+    int offset = nfields[0] + j*dim;
+
+    for (int k = 0; k < dim; k++) {
+      ((double*)PyArray_DATA((PyArrayObject*)pVec))[k] = field_vals[i][k + offset];
+    }
+
+    PyDict_SetItemString(pNames, field_names[j + nfields[0]], pVec);
+    Py_DECREF(pVec);
+  }
+
+  for (int j = 0; j < nfields[2]; j++) {
+    // tensor fields
+    PyObject *pTens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
+    int offset = nfields[0] + nfields[1]*dim + j*dim*dim;
+
+    for (int k = 0; k < dim; k++) {
+      for (int l = 0; l < dim; l++) {
+	((double*)PyArray_DATA((PyArrayObject*)pTens))[k + l*dim] = field_vals[i][k*dim + l + offset];
+      }
+    }
+
+    PyDict_SetItemString(pNames, field_names[j + nfields[0] + nfields[1]], pTens);
+    Py_DECREF(pTens);
+  }
+}
+
+void set_field_from_python_fields(char *function, int function_len, int dim, int nodes,
+				  double *x, double *y, double *z, double t, double dt,
+				  int name_len, int *nfields, char *field_names, double *field_vals,
+				  int *old_nfields, char *old_field_names, double *old_field_vals,
+				  int *old_natts, char *old_att_names, double *old_atts,
+				  int *stat, int *result_dim, void **result,
+				  int (*set_result)(int, int *, void **, PyObject*))
+{
+#ifndef HAVE_PYTHON
+  int i;
+  strncpy(function, "No Python support!\n", (size_t)function_len);
+  for (i = 0; i < function_len; i++)
+  {
+    if (function[i] == '\0')
+      function[i] = ' ';
+  }
+
+  *stat=1;
+  return;
+#else
+  PyObject *pLocals, *pFunc, *pNames, *pT, *pdT, *pPos, *pArgs, *pResult;
+
+  import_array();
+
+  // load the user's function as a Python object -- borrows locals
+  pLocals = PyDict_New();
+  if (eval_user_func(function, function_len, pLocals, &pFunc)) {
+    *stat = 1;
+    return;
+  }
+
+  // create objects to hold arguments
+  pNames = PyDict_New();
+  pT = PyFloat_FromDouble(t);
+  pdT = PyFloat_FromDouble(dt);
+  pPos = PyTuple_New(dim);
+
+  // build function argument tuple
+  pArgs = PyTuple_New(4);
+  PyTuple_SetItem(pArgs, 0, pPos);
+  PyTuple_SetItem(pArgs, 1, pT);
+  PyTuple_SetItem(pArgs, 2, pdT);
+  PyTuple_SetItem(pArgs, 3, pNames);
+
+  for (int i = 0; i < nodes; i++) {
+    // set position
+    set_pos_tuple(i, dim, pPos, x, y, z);
+    set_dict_from_fields(i, dim, nfields, name_len, field_names, field_vals, pNames);
+    set_dict_from_fields(i, dim, old_nfields, name_len, old_field_names, old_field_vals, pNames);
+    set_dict_from_fields(i, dim, old_natts, name_len, old_att_names, old_atts, pNames);
+
+    if (PyErr_Occurred()) {
+      PyErr_Print();
+      *stat = 1;
+      return;
+    }
+
+    pResult = PyObject_CallObject(pFunc, pArgs);
+    if (PyErr_Occurred()) {
+      PyErr_Print();
+      *stat = 1;
+      return;
+    }
+
+    int res = set_result(i, result_dim, result, pResult);
+    if (res) {
+      *stat = res;
+      return;
+    }
+
+    Py_DECREF(pResult);
+  }
+
+  Py_DECREF(pArgs);
+  Py_DECREF(pLocals);
+  PyGC_Collect();
+  *stat = 0;
+#endif
+}
+
+void set_scalar_particles_from_python_fields(char *function, int function_len, int dim, int nodes,
+					     double *x, double *y, double *z, double t, double dt,
+					     int name_len, int *nfields, char *field_names, double *field_vals,
+					     int *old_nfields, char *old_field_names, double *old_field_vals,
+					     int *old_natts, char *old_att_names, double *old_atts,
+					     double *result, int *stat)
+{
+  set_field_from_python_fields(function, function_len, dim, nodes, x, y, z, t, dt, name_len,
+			       nfields, field_names, field_vals,
+			       old_nfields, old_field_names, old_field_vals,
+			       old_natts, old_att_names, old_atts,
+			       stat, NULL, (void**)&result, set_scalar_result_double);
 }
 
 
@@ -408,417 +572,6 @@ void set_detectors_from_python(char *function, int *function_len, int *dim,
   Py_DECREF(pArgs);
   Py_DECREF(pLocals);
   Py_DECREF(pCode);
-
-  // Force a garbage collection
-  PyGC_Collect();
-
-  *stat=0;
-  return;
-#endif
-}
-
-//#define set_scalar_particles_from_python_fields F77_FUNC(set_scalar_particles_from_python_fields, SET_SCALAR_PARTICLES_FROM_PYTHON_FIELDS)
-void set_scalar_particles_from_python_fields(char *function, int function_len, int dim, int ndete,
-				      double x[], double y[], double z[], double t, double dt,
-				      int FIELD_NAME_LEN, int nfields[],
-				      char field_names[nfields[0]+nfields[1]+nfields[2]][FIELD_NAME_LEN],
-				      double field_vals[ndete][nfields[0]+dim*nfields[1]+dim*dim*nfields[2]],
-				      int old_nfields[],
-				      char old_field_names[old_nfields[0]+old_nfields[1]+old_nfields[2]][FIELD_NAME_LEN],
-				      double old_field_vals[ndete][old_nfields[0]+dim*old_nfields[1]+dim*dim*old_nfields[2]],
-				      int old_nattributes[],
-				      char old_att_names[old_nattributes[0]+old_nattributes[1]+old_nattributes[2]][FIELD_NAME_LEN],
-				      double old_attributes[ndete][old_nattributes[0]+dim*old_nattributes[1]+dim*dim*old_nattributes[2]],
-				      double result[], int* stat)
-
-{
-#ifndef HAVE_PYTHON
-  int i;
-  strncpy(function, "No Python support!\n", (size_t) *function_len);
-  for (i=0; i < *function_len; i++)
-  {
-    if (function[i] == '\0')
-      function[i] = ' ';
-  }
-
-  *stat=1;
-  return;
-#else
-  PyObject *pMain, *pGlobals, *pLocals, *pFunc, *pCode, *pResult,
-    *pArgs, *pPos, *px, *pT, *pdT, *pField, *pNames;
-  PyObject *vec, *tens;
-  char *function_c;
-  int i, j, k, l;
-  npy_intp dims[] = {dim, dim};
-  import_array();
-
-  // the function string passed down from Fortran needs terminating,
-  // so make a copy and fiddle with it (remember to free it)
-  function_c = (char *)malloc(function_len+1);
-  memcpy(function_c, function, function_len);
-  function_c[function_len] = 0;
-
-  // Get a reference to the main module and global dictionary
-  pMain = PyImport_AddModule("__main__");
-
-  pGlobals = PyModule_GetDict(pMain);
-  // Global and local namespace dictionaries for our code.
-  pLocals = PyDict_New();
-
-  // Execute the user's code.
-  pCode = PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
-
-  // Extract the function from the code.
-  pFunc = PyDict_GetItemString(pLocals, "val");
-  if (pFunc == NULL) {
-      printf("Couldn't find a 'val' function in your Python code.\n");
-      *stat=1;
-      return;
-  }
-
-  // Clean up memory from null termination.
-  free(function_c);
-
-  // Check for errors in executing user code.
-  if (PyErr_Occurred()){
-    PyErr_Print();
-    *stat=1;
-    return;
-  }
-
-  // allocate Python object for function arguments
-  // Field variable dictionary space
-  pNames = PyDict_New();
-  // Python form of time variable.
-  pT = PyFloat_FromDouble(t);
-  // Python form of timestep variable.
-  pdT = PyFloat_FromDouble(dt);
-  // Tuple containing the current position vector.
-  pPos = PyTuple_New(dim);
-
-  // Tuple of arguments to function;
-  pArgs = PyTuple_New(4);
-  PyTuple_SetItem(pArgs, 3, pNames);
-  PyTuple_SetItem(pArgs, 2, pdT);
-  PyTuple_SetItem(pArgs, 1, pT);
-  PyTuple_SetItem(pArgs, 0, pPos);
-
-  //loop over all particles
-  for (i = 0; i < ndete; i++)
-    {
-      // Set values for position vector.
-      px = PyFloat_FromDouble(x[i]);
-      PyTuple_SetItem(pPos, 0, px);
-
-      if (dim>1) {
-	px = PyFloat_FromDouble(y[i]);
-	PyTuple_SetItem(pPos, 1, px);
-
-	if (dim>2) {
-	  px = PyFloat_FromDouble(z[i]);
-	  PyTuple_SetItem(pPos, 2, px);
-	}
-      }
-
-      //Set values for fields dictionary
-      //Set field values (scalar, then vector, then tensor)
-      for (j=0; j < nfields[0]; j++)//scalar fields
-      	{
-      	  pField = PyFloat_FromDouble(field_vals[i][j]);
-      	  PyDict_SetItemString(pNames, field_names[j], pField);
-	  Py_DECREF(pField);
-      	}
-
-      for (j=0; j < nfields[1]; j++)//vector fields
-      	{
-	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      ((double*)PyArray_DATA(vec))[k] = field_vals[i][nfields[0] + (j*dim) + k];
-      	    }
-      	  PyDict_SetItemString(pNames, field_names[j + nfields[0]], vec);
-	  Py_DECREF(vec);
-      	}
-
-      for (j=0; j < nfields[2]; j++)//tensor fields
-      	{
-	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      for (l=0; l < dim; l++)
-      		{
-		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ((double*)PyArray_DATA(tens))[k + l*dim] = field_vals[i][nfields[0] + nfields[1]*dim + (j*dim*dim) + (k*dim) + l];
-      		}
-      	    }
-	   PyDict_SetItemString(pNames, field_names[j + nfields[0] + nfields[1]], tens);
-	   Py_DECREF(tens);
-      	}
-
-
-      //Set old_field values (scalar, then vector, then tensor)
-      for (j=0; j < old_nfields[0]; j++)//scalar old_fields
-      	{
-      	  pField = PyFloat_FromDouble(old_field_vals[i][j]);
-      	  PyDict_SetItemString(pNames, old_field_names[j], pField);
-	  Py_DECREF(pField);
-      	}
-
-      for (j=0; j < old_nfields[1]; j++)//vector old_fields
-      	{
-	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      ((double*)PyArray_DATA(vec))[k] = old_field_vals[i][old_nfields[0] + (j*dim) + k];
-      	    }
-	  PyDict_SetItemString(pNames, old_field_names[j+old_nfields[0]], vec);
-	  Py_DECREF(vec);
-      	}
-
-      for (j=0; j < old_nfields[2]; j++)//tensor old_fields
-      	{
-	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      for (l=0; l < dim; l++)
-      		{
-		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ((double*)PyArray_DATA(tens))[k + l*dim] = old_field_vals[i][old_nfields[0] + old_nfields[1]*dim + (j*dim*dim) + (k*dim) + l];
-      		}
-      	    }
-	  PyDict_SetItemString(pNames, old_field_names[j + old_nfields[0] + old_nfields[1]], tens);
-	  Py_DECREF(tens);
-      	}
-
-      //Set old_attribute values (scalar, then vector, then tensor)
-      for (j=0; j < old_nattributes[0]; j++)//scalar old_attributes
-      	{
-      	  pField = PyFloat_FromDouble(old_attributes[i][j]);
-      	  PyDict_SetItemString(pNames, old_att_names[j], pField);
-	  Py_DECREF(pField);
-      	}
-
-      for (j=0; j < old_nattributes[1]; j++)//vector old_attributes
-      	{
-	  vec = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      ((double*)PyArray_DATA(vec))[k] = old_attributes[i][old_nattributes[0] + (j*dim) + k];
-      	    }
-
-	  PyDict_SetItemString(pNames, old_att_names[j+old_nattributes[0]], vec);
-	  Py_DECREF(vec);
-      	}
-
-      for (j=0; j < old_nattributes[2]; j++)//tensor old_attributes
-      	{
-	  tens = PyArray_SimpleNew(2, dims, NPY_DOUBLE);
-      	  for (k=0; k < dim; k++)
-      	    {
-      	      for (l=0; l < dim; l++)
-      		{
-		  //l and k swapped in ptField so tensor is correctly read into python
-      		  ((double*)PyArray_DATA(tens))[k + l*dim] = old_attributes[i][old_nattributes[0] + old_nattributes[1]*dim + (j*dim*dim) + (k*dim) + l];
-      		}
-      	    }
-	  PyDict_SetItemString(pNames, old_att_names[j + old_nattributes[0] + old_nattributes[1]], tens);
-	  Py_DECREF(tens);
-      	}
-
-      // Check for a Python error in the function call
-      if (PyErr_Occurred()){
-	PyErr_Print();
-	*stat=1;
-	return;
-      }
-
-      pResult=PyObject_CallObject(pFunc, pArgs);
-
-      // Check for a Python error in the function call
-      if (PyErr_Occurred()){
-	PyErr_Print();
-	*stat=1;
-	return;
-      }
-
-      result[i]=PyFloat_AsDouble(pResult);
-
-      // Check for a Python error in result.
-      if (PyErr_Occurred()){
-	PyErr_Print();
-	*stat=1;
-	return;
-      }
-
-    }
-  Py_DECREF(pResult);
-
-  // Clean up
-  Py_DECREF(pArgs);
-  Py_DECREF(pLocals);
-  Py_DECREF(pCode);
-  Py_DECREF(pNames);
-
-  // Force a garbage collection
-  PyGC_Collect();
-
-  *stat=0;
-  return;
-#endif
-}
-
-#define set_vector_particles_from_python F77_FUNC(set_vector_particles_from_python, SET_VECTOR_PARTICLES_FROM_PYTHON)
-void set_vector_particles_from_python(char *function, int *function_len, int *dim, int *ndete,
-			       double x[], double y[], double z[], double *t, double *dt,
-				      double result[*dim][*ndete], int* stat)
-{
-#ifndef HAVE_PYTHON
-  int i;
-  strncpy(function, "No Python support!\n", (size_t) *function_len);
-  for (i=0; i < *function_len; i++)
-  {
-    if (function[i] == '\0')
-      function[i] = ' ';
-  }
-
-  *stat=1;
-  return;
-#else
-  PyObject *pMain, *pGlobals, *pLocals, *pFunc, *pCode, *pResult,
-    *pArgs, *pPos, *px, *pT, *pdT;
-
-  char *function_c;
-  int i;
-
-  // the function string passed down from Fortran needs terminating,
-  // so make a copy and fiddle with it (remember to free it)
-  function_c = (char *)malloc(*function_len+3);
-  memcpy( function_c, function, *function_len );
-  function_c[*function_len] = 0;
-
-  // Get a reference to the main module and global dictionary
-  pMain = PyImport_AddModule("__main__");
-
-  pGlobals = PyModule_GetDict(pMain);
-  // Global and local namespace dictionaries for our code.
-  pLocals=PyDict_New();
-
-  // Execute the user's code.
-  pCode=PyRun_String(function_c, Py_file_input, pGlobals, pLocals);
-
-  // Extract the function from the code.
-  pFunc=PyDict_GetItemString(pLocals, "val");
-  if (pFunc == NULL) {
-      printf("Couldn't find a 'val' function in your Python code.\n");
-      *stat=1;
-      return;
-  }
-
-  // Clean up memory from null termination.
-  free(function_c);
-
-  // Check for errors in executing user code.
-  if (PyErr_Occurred()){
-    PyErr_Print();
-    *stat=1;
-    return;
-  }
-
-  // Python form of time variable.
-  pT=PyFloat_FromDouble(*t);
-
-  // Python form of timestep variable.
-  pdT=PyFloat_FromDouble(*dt);
-
-  // Tuple containing the current position vector.
-  pPos=PyTuple_New(*dim);
-
-  //Tuple containing the Arguments
-  pArgs=PyTuple_New(3);
-  PyTuple_SetItem(pArgs, 2, pdT);
-  PyTuple_SetItem(pArgs, 1, pT);
-  PyTuple_SetItem(pArgs, 0, pPos);
-
-  for (i = 0; i < *ndete; i++)
-    {
-
-      // Set values for position vector.
-
-      px=PyFloat_FromDouble(x[i]);
-      PyTuple_SetItem(pPos, 0, px);
-
-      if (*dim>1) {
-	px=PyFloat_FromDouble(y[i]);
-	PyTuple_SetItem(pPos, 1, px);
-
-	if (*dim>2) {
-	  px=PyFloat_FromDouble(z[i]);
-	  PyTuple_SetItem(pPos, 2, px);
-	}
-      }
-
-      // Check for a Python error in the function call
-      if (PyErr_Occurred()){
-	PyErr_Print();
-	*stat=1;
-	return;
-      }
-
-      pResult=PyObject_CallObject(pFunc, pArgs);
-
-      // Check for a Python error in the function call
-      if (PyErr_Occurred()){
-	PyErr_Print();
-	*stat=1;
-	return;
-      }
-
-      if (PyObject_Length(pResult) != *dim)
-      	{
-      	  fprintf(stderr, "Error: length of object returned from python (%d) does not match the allocated dimension of the vector field (%d).\n",
-      		  (int) PyObject_Length(pResult), *dim);
-      	  *stat = 1;
-      	  return;
-      	}
-
-      px=PySequence_GetItem(pResult, 0);
-      result[0][i]=PyFloat_AsDouble(px);
-      // Check for a Python error in unpacking tuple.
-      if (PyErr_Occurred()){
-      	PyErr_Print();
-      	*stat=1;
-      	return;
-      }
-
-      if (*dim>1) {
-      	px=PySequence_GetItem(pResult, 1);
-      	result[1][i]=PyFloat_AsDouble(px);
-      	// Check for a Python error in unpacking tuple.
-      	if (PyErr_Occurred()){
-      	  PyErr_Print();
-      	  return;
-      	}
-
-      	if (*dim>2) {
-      	  px=PySequence_GetItem(pResult, 2);
-      	  result[2][i]=PyFloat_AsDouble(px);
-      	  // Check for a Python error in unpacking tuple.
-      	  if (PyErr_Occurred()){
-      	    PyErr_Print();
-      	    return;
-      	  }
-      	}
-      }
-
-    }
-
-  Py_DECREF(pResult);
-
-  // Clean up
-  Py_DECREF(pArgs);
-  Py_DECREF(pLocals);
-  Py_DECREF(pCode);
-  Py_DECREF(px);
 
   // Force a garbage collection
   PyGC_Collect();
