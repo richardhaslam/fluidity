@@ -1372,36 +1372,36 @@ contains
     if (tot_fields /= 0) then
       do phase = 1, size(state)
         scalar_field_loop: do field = 1, size(state(phase)%scalar_names)
-          sfield => extract_scalar_field(state(phase), state(i)%scalar_names(field))
+          sfield => extract_scalar_field(state(phase), state(phase)%scalar_names(field))
           if (sfield%option_path == "" .or. aliased(sfield)) then
             cycle
           else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
             old_field = old_field + 1
-            h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%scalar_names(j)), old_field_data(:,old_field))
+            h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%scalar_names(field)), old_field_data(:,old_field))
           end if
         end do scalar_field_loop
 
         vector_field_loop: do field = 1, size(state(phase)%vector_names)
-          vfield => extract_vector_field(state(phase), state(i)%vector_names(field))
+          vfield => extract_vector_field(state(phase), state(phase)%vector_names(field))
           if (vfield%option_path == "" .or. aliased(vfield)) then
             cycle
           else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
             do j = 1, dim
               old_field = old_field + 1
-              h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%vector_names(j))//"_"//int2str(j), old_field_data(:,old_field))
+              h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%vector_names(field))//"_"//int2str(j), old_field_data(:,old_field))
             end do
           end if
         end do vector_field_loop
 
         tensor_field_loop: do field = 1, size(state(phase)%tensor_names)
-          tfield => extract_tensor_field(state(phase), state(i)%tensor_names(field))
+          tfield => extract_tensor_field(state(phase), state(phase)%tensor_names(field))
           if (tfield%option_path == "" .or. aliased(tfield)) then
             cycle
           else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
             do j = 1, dim
               do k = 1, dim
                 old_field = old_field + 1
-                h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(i)%tensor_names(j))//"_"//int2str(j)//int2str(k), old_field_data(:,old_field))
+                h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%tensor_names(field))//"_"//int2str(j)//int2str(k), old_field_data(:,old_field))
               end do
             end do
           end if
