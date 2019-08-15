@@ -37,22 +37,26 @@ module detector_data_types
   private
   
   public :: detector_type, rk_gs_parameters, detector_linked_list, &
-            detector_list_ptr, stringlist, &
+            detector_list_ptr, stringlist, field_names, &
             STATIC_DETECTOR, LAGRANGIAN_DETECTOR
 
   integer, parameter :: STATIC_DETECTOR=1, LAGRANGIAN_DETECTOR=2  
 
   type stringlist
-     !!< Container type for a list of strings.
-     character(len=FIELD_NAME_LEN), dimension(:), pointer :: ptr
+    !!< Container type for a list of strings.
+    character(len=FIELD_NAME_LEN), dimension(:), pointer :: ptr
   end type stringlist
+
+  type field_names
+    character(len=FIELD_NAME_LEN), dimension(:), allocatable :: s, v, t
+  end type field_names
 
   !! Type for caching detector position and search information.
   type detector_type
      !! Physical location of the detector.
      real, dimension(:), allocatable :: position
      !! Name of the detector in input and output.
-     character(len=FIELD_NAME_LEN) :: name 
+     character(len=FIELD_NAME_LEN) :: name
      !! Element number in which the detector lies.
      integer :: element
      !! Local coordinates of the detector in that element.
