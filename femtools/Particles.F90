@@ -278,13 +278,14 @@ contains
           if (is_active_process) then
             ! Read particles from options -- only if this process is currently active (as defined in flredecomp
             if (from_file) then
-              call read_particles_from_file(sub_particles, subname, &
-                   attr_counts, store_old_fields, state, xfield, dim, &
-                   subgroup_path, particle_lists(list_counter), number_of_partitions)
+              call read_particles_from_file(sub_particles, subname, subgroup_path, &
+                   particle_lists(list_counter), xfield, dim, &
+                   attr_counts, attr_names, old_attr_names, old_field_names, &
+                   number_of_partitions)
             else
-              call read_particles_from_python(sub_particles, subname, &
-                   current_time, state, attr_counts%attrs, xfield, dim, &
-                   subgroup_path, particle_lists(list_counter), global)
+              call read_particles_from_python(sub_particles, subname, subgroup_path, &
+                   particle_lists(list_counter), xfield, dim, &
+                   current_time, state, attr_counts, global)
             end if
           end if
 
@@ -382,16 +383,16 @@ contains
     ewrite(2,*) "Reading particles from options"
     call get_option(trim(subgroup_path)//"/initial_position/python", func)
     call get_option("/timestepping/timestep", dt)
-    allocate(coords(dim,sub_particles))
-    call set_detector_coords_from_python(coords, sub_particles, func, current_time)
+    allocate(coords(dim, n_particles))
+    call set_detector_coords_from_python(coords, n_particles, func, current_time)
 
-    str_size = len_trim(int2str(sub_particles))
+    str_size = len_trim(int2str(n_particles))
     fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
 
     do i = 1, n_particles
       write(particle_name, fmt) trim(subgroup_name)//"_", i
       call create_single_particle(p_list, xfield, coords(:,i), &
-           i, LAGRANGIAN_DETECTOR, trim(particle_name), attribute_size, global=global)
+           i, trim(particle_name), dim, attr_counts, global=global)
     end do
 
     ! since the particles have only been initialised with their position
@@ -477,7 +478,7 @@ contains
     character(len=FIELD_NAME_LEN) :: particle_name, fmt
     integer(kind=8) :: h5_ierror, h5_id, h5_prop, view_start, view_end ! h5hut state
     integer(kind=8), dimension(:), allocatable :: npoints ! number of points for each rank to read
-    type(attr_vals_type), allocatable :: attr_vals, old_attr_vals, old_field_vals ! scalar/vector/tensor arrays
+    type(attr_vals_type), pointer :: attr_vals, old_attr_vals, old_field_vals ! scalar/vector/tensor arrays
 
     ewrite(2,*) "Reading particles from file"
 
@@ -546,8 +547,8 @@ contains
 
       ! don't use a global check for this particle
       call create_single_particle(p_list, xfield, &
-           positions, id(1), LAGRANGIAN_DETECTOR, trim(particle_name), &
-           attribute_size, attribute_vals=attribute_vals, global=.false.)
+           positions, id(1), trim(particle_name), dim, &
+           attr_counts, attr_vals, old_attr_vals, old_field_vals, global=.false.)
     end do
 
     h5_ierror = h5_closefile(h5_id)
@@ -577,74 +578,132 @@ contains
     ! optionally set any file attributes here?
   end subroutine set_particle_output_file
 
-  subroutine create_single_particle(detector_list, xfield, position, id, type, name, attribute_size, attribute_vals, global)
-    ! Allocate a single particle, populate and insert it into the given list
-    ! In parallel, first check if the particle would be local and only allocate if it is
+  !! Allocate a single particle, populate and insert it into the given list
+  !! In parallel, first check if the particle would be local and only allocate if it is
+  subroutine create_single_particle(detector_list, xfield, position, id, name, dim, &
+       attr_counts, attr_vals, old_attr_vals, old_field_vals, global)
+    !> The detector list to hold the particle
     type(detector_linked_list), intent(inout) :: detector_list
+    !> Coordinate vector field
     type(vector_field), pointer, intent(in) :: xfield
+    !> Spatial position of the particle
     real, dimension(xfield%dim), intent(in) :: position
-    integer, intent(in) :: id, type
+    !> Unique ID number for this particle
+    integer, intent(in) :: id
+    !> The particle's name
     character(len=*), intent(in) :: name
+    !> Geometry dimension
+    integer, intent(in) :: dim
+    !> Counts of scalar, vector and tensor attributes, old attributes
+    !! and old fields to store on the particle
+    type(attr_counts_type), intent(in) :: attr_counts
+    !> If provided, initialise the particle's attributes directly
+    type(attr_vals_type), intent(in), optional :: attr_vals, old_attr_vals, old_field_vals
+    !> Whether to use a global query for the element owning this particle
+    logical, intent(in), optional :: global
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
     real, dimension(xfield%dim+1) :: lcoords
     integer :: element
-    real, dimension(:,:), intent(in), optional :: attribute_vals
-    integer, dimension(3), intent(in) :: attribute_size
-    logical, intent(in), optional :: global
 
     real ::  dt
     logical :: picker_global = .true.
 
     if (present(global)) picker_global = global
 
-    shape=>ele_shape(xfield,1)
+    shape => ele_shape(xfield,1)
     assert(xfield%dim+1==local_coord_count(shape))
-    detector_list%detector_names(id)=name
+
+    detector_list%detector_names(id) = name
     ! Determine element and local_coords from position
-    call picker_inquire(xfield,position,element,local_coord=lcoords,global=picker_global)
+    call picker_inquire(xfield, position, element, local_coord=lcoords, global=picker_global)
     call get_option("/timestepping/timestep", dt)
     ! If we're in parallel and don't own the element, skip this particle
     if (isparallel()) then
        if (element<0) return
        if (.not.element_owned(xfield,element)) return
     else
-       ! In serial make sure the particle is in the domain
-       ! unless we have the write_nan_outside override
-       if (element<0 .and. .not.detector_list%write_nan_outside) then
-          ewrite(-1,*) "Dealing with particle ", id, " named: ", trim(name)
-          FLExit("Trying to initialise particle outside of computational domain")
-       end if
+      ! In serial make sure the particle is in the domain
+      ! unless we have the write_nan_outside override
+      if (element<0 .and. .not.detector_list%write_nan_outside) then
+        ewrite(-1,*) "Dealing with particle ", id, " named: ", trim(name)
+        FLExit("Trying to initialise particle outside of computational domain")
+      end if
     end if
+
     ! Otherwise, allocate and insert particle
     allocate(detector)
     allocate(detector%position(xfield%dim))
     allocate(detector%local_coords(local_coord_count(shape)))
     call insert(detector, detector_list)
+
     ! Populate particle
-    detector%name=name
-    detector%position=position
-    detector%element=element
-    detector%local_coords=lcoords
-    detector%type=type
-    detector%id_number=id
+    detector%name = name
+    detector%position = position
+    detector%element = element
+    detector%local_coords = lcoords
+    detector%type = LAGRANGIAN_DETECTOR
+    detector%id_number = id
 
-    allocate(detector%attributes(attribute_size(1)))
-    allocate(detector%old_attributes(attribute_size(2)))
-    allocate(detector%old_fields(attribute_size(3)))
+    ! allocate space to store all attributes on the particle
+    allocate(detector%attributes(total_attributes(attr_counts%attrs, dim)))
+    allocate(detector%old_attributes(total_attributes(attr_counts%old_attrs, dim)))
+    allocate(detector%old_fields(total_attributes(attr_counts%old_fields, dim)))
 
-    if (present(attribute_vals)) then
-       detector%attributes = attribute_vals(1,1:attribute_size(1))
-       detector%old_attributes = attribute_vals(2,1:attribute_size(2))
-       detector%old_fields = attribute_vals(3,1:attribute_size(3))
-    else
-       detector%attributes(:) = 0
-       detector%old_attributes(:) = 0
-       detector%old_fields(:) = 0
-    end if
-
+    ! copy attributes if they're present, otherwise initialise to zero
+    call copy_attrs(detector%attributes, dim, attr_counts%attrs, attr_vals)
+    call copy_attrs(detector%old_attributes, dim, attr_counts%old_attrs, old_attr_vals)
+    call copy_attrs(detector%old_fields, dim, attr_counts%old_fields, old_field_vals)
   end subroutine create_single_particle
+
+  !! Convert an array of scalar, vector and tensor attribute counts
+  !! to the total number of attribute slices (i.e. 1 per scalar attribute,
+  !! 'dim' per vector, and 'dim*dim' per tensor)
+  function total_attributes(counts, dim)
+    !> Counts of scalar, vector and tensor attributes
+    integer, dimension(3), intent(in) :: counts
+    !> Geometry dimension
+    integer, intent(in) :: dim
+    integer :: total_attributes
+
+    total_attributes = counts(1) + dim*counts(2) + dim*dim*counts(3)
+  end function total_attributes
+
+  subroutine copy_attrs(dest, dim, counts, vals)
+    real, dimension(:), intent(out) :: dest
+    integer, intent(in) :: dim
+    integer, dimension(3), intent(in) :: counts
+    type(attr_vals_type), intent(in), optional :: vals
+
+    integer :: cur, i, j, k
+
+    if (present(vals)) then
+      cur = 1
+      scalar_copy_loop: do i = 1, counts(1)
+        dest(cur) = vals%s(i)
+        cur = cur + 1
+      end do scalar_copy_loop
+
+      vector_copy_loop: do i = 1, counts(2)
+        do j = 1, dim
+          dest(cur) = vals%v(j,i)
+          cur = cur + 1
+        end do
+      end do vector_copy_loop
+
+      tensor_copy_loop: do i = 1, counts(3)
+        do j = 1, dim
+          do k = 1, dim
+            dest(cur) = vals%t(j,k,i)
+            cur = cur + 1
+          end do
+        end do
+      end do tensor_copy_loop
+    else
+      dest(:) = 0.
+    end if
+  end subroutine copy_attrs
 
   subroutine move_particles(state, dt, timestep)
     !!Routine to loop over particle arrays and call move_lagrangian_detectors
