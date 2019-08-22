@@ -249,7 +249,7 @@ contains
           call option_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
                attr_names%v, old_attr_names%v, attr_counts%attrs(2), attr_counts%old_attrs(2))
           call option_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
-               attr_names%t, old_attr_names%t, attr_counts%attrs(2), attr_counts%old_attrs(2))
+               attr_names%t, old_attr_names%t, attr_counts%attrs(3), attr_counts%old_attrs(3))
 
           ! If any attributes are from fields, we'll need to store old fields too
           store_old_fields = .false.
