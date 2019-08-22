@@ -37,19 +37,19 @@ module detector_data_types
   private
   
   public :: detector_type, rk_gs_parameters, detector_linked_list, &
-            detector_list_ptr, stringlist, field_names, &
+            detector_list_ptr, stringlist, attr_names_type, &
             STATIC_DETECTOR, LAGRANGIAN_DETECTOR
 
-  integer, parameter :: STATIC_DETECTOR=1, LAGRANGIAN_DETECTOR=2  
+  integer, parameter :: STATIC_DETECTOR=1, LAGRANGIAN_DETECTOR=2
 
   type stringlist
     !!< Container type for a list of strings.
     character(len=FIELD_NAME_LEN), dimension(:), pointer :: ptr
   end type stringlist
 
-  type field_names
+  type attr_names_type
     character(len=FIELD_NAME_LEN), dimension(:), allocatable :: s, v, t
-  end type field_names
+  end type attr_names_type
 
   !! Type for caching detector position and search information.
   type detector_type
@@ -81,7 +81,7 @@ module detector_data_types
      logical :: search_complete
      !! Pointers for detector linked lists
      TYPE (detector_type), POINTER :: next=> null()
-     TYPE (detector_type), POINTER :: previous=> null() 
+     TYPE (detector_type), POINTER :: previous=> null()
   end type detector_type
 
   ! Parameters for lagrangian detector movement
@@ -118,6 +118,9 @@ module detector_data_types
      type(stringlist), dimension(:), allocatable :: vfield_list
      integer :: num_sfields = 0   ! Total number of scalar fields across all phases
      integer :: num_vfields = 0   ! Total number of vector fields across all phases
+
+     !! Names of attributes and fields stored in a particle subgroup
+     type(attr_names_type) :: attr_names, old_attr_names, old_field_names
 
      !! I/O parameters
      logical :: write_nan_outside = .false.

@@ -62,11 +62,45 @@ module particles
   type(detector_linked_list), allocatable, dimension(:), save :: particle_lists !!Particle lists with dimension equal to the number of particle subgroups
   type(time_period_type), allocatable, dimension(:), save :: output_CS !! Contain timing info for group output
 
-  type attr_counts
-    integer(3) :: attrs, old_attrs, old_fields
-  end type attr_counts
+
+  type attr_counts_type
+    integer, dimension(3) :: attrs, old_attrs, old_fields
+  end type attr_counts_type
+
+  type attr_vals_type
+    real, dimension(:), allocatable :: s
+    real, dimension(:,:), allocatable :: v
+    real, dimension(:,:,:), allocatable :: t
+  end type attr_vals_type
+
+  interface allocate
+    module procedure allocate_attr_vals
+  end interface allocate
+
+  interface deallocate
+    module procedure deallocate_attr_vals
+  end interface deallocate
 
 contains
+  subroutine allocate_attr_vals(vals, dim, counts)
+    type(attr_vals_type), pointer :: vals
+    integer, intent(in) :: dim
+    integer, dimension(3), intent(in) :: counts
+
+    allocate(vals)
+    allocate(vals%s(counts(1)))
+    allocate(vals%v(dim, counts(2)))
+    allocate(vals%t(dim, dim, counts(3)))
+  end subroutine allocate_attr_vals
+
+  subroutine deallocate_attr_vals(vals)
+    type(attr_vals_type), pointer :: vals
+
+    deallocate(vals%s)
+    deallocate(vals%v)
+    deallocate(vals%t)
+    deallocate(vals)
+  end subroutine deallocate_attr_vals
 
   subroutine initialise_particles(filename, state, global, from_flredecomp, number_of_partitions)
     !! Initialise particles and set up particle file headers (per particle array)
@@ -82,7 +116,6 @@ contains
     type(vector_field), pointer :: xfield
     real :: current_time
 
-    type(attr_counts) :: attr_counts
     integer :: sub_particles
     integer :: i, j, k
     integer :: dim, particle_groups, total_arrays, list_counter
@@ -90,10 +123,12 @@ contains
     integer :: totaldet_global
     logical :: from_file, do_output, store_old_fields
     integer :: n_oldfields, phase, f
-    integer :: s_field, v_field, t_field
+    integer :: s_field, v_field, t_field ! field index variables
     integer, dimension(3) :: field_counts
-    type(field_names) :: field_names
+    type(attr_names_type) :: attr_names, old_attr_names, old_field_names
+    type(attr_counts_type) :: attr_counts
 
+    ! field pointers to get their names, for old_field_names
     type(scalar_field), pointer :: sfield
     type(vector_field), pointer :: vfield
     type(tensor_field), pointer :: tfield
@@ -143,9 +178,9 @@ contains
     n_oldfields = sum(field_counts)
 
     ! allocate arrays to hold field names
-    allocate(field_names%s(field_counts(1)))
-    allocate(field_names%v(field_counts(2)))
-    allocate(field_names%t(field_counts(3)))
+    allocate(old_field_names%s(field_counts(1)))
+    allocate(old_field_names%v(field_counts(2)))
+    allocate(old_field_names%t(field_counts(3)))
 
     ! read the names of the fields if there are any
     s_field = 0
@@ -156,27 +191,27 @@ contains
         sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
         if (sfield%option_path == "" .or. aliased(sfield)) then
           cycle
-        else if have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+        else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
           s_field = s_field + 1
-          field_names%s(s_field) = state(i)%scalar_names(j)
+          old_field_names%s(s_field) = state(i)%scalar_names(j)
         end if
       end do
       do j = 1, size(state(i)%vector_names)
         vfield => extract_vector_field(state(i), state(i)%vector_names(j))
         if (vfield%option_path == "" .or. aliased(vfield)) then
           cycle
-        else if have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+        else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
           v_field = v_field + 1
-          field_names%v(v_field) = state(i)%vector_names(j)
+          old_field_names%v(v_field) = state(i)%vector_names(j)
         end if
       end do
       do j = 1, size(state(i)%tensor_names)
         tfield => extract_tensor_field(state(i), state(i)%tensor_names(j))
         if (tfield%option_path == "" .or. aliased(tfield)) then
           cycle
-        else if have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+        else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
           t_field = t_field + 1
-          field_names%t(t_field) = state(i)%tensor_names(j)
+          old_field_names%t(t_field) = state(i)%tensor_names(j)
         end if
       end do
     end do
@@ -209,11 +244,11 @@ contains
           call register_detector_list(particle_lists(list_counter))
 
           ! Find number of attributes, old attributes, and names of each
-          option_names_and_count(trim(subgroup_path) // "/attributes/scalar_attribute", &
+          call option_names_and_count(trim(subgroup_path) // "/attributes/scalar_attribute", &
                attr_names%s, old_attr_names%s, attr_counts%attrs(1), attr_counts%old_attrs(1))
-          option_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
+          call option_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
                attr_names%v, old_attr_names%v, attr_counts%attrs(2), attr_counts%old_attrs(2))
-          option_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
+          call option_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
                attr_names%t, old_attr_names%t, attr_counts%attrs(2), attr_counts%old_attrs(2))
 
           ! If any attributes are from fields, we'll need to store old fields too
@@ -222,6 +257,12 @@ contains
               option_count(trim(subgroup_path) // "/attributes/vector_attribute/python_fields") > 0 .or. &
               option_count(trim(subgroup_path) // "/attributes/tensor_attribute/python_fields") > 0) then
              store_old_fields = .true.
+          end if
+
+          if (store_old_fields) then
+            attr_counts%old_fields(:) = field_counts(:)
+          else
+            attr_counts%old_fields(:) = 0
           end if
 
           ! Enable particles to drift with the mesh
@@ -304,26 +345,39 @@ contains
     end do
   end subroutine option_names_and_count
 
-  subroutine read_particles_from_python(sub_particles, subname, current_time, state, &
-       attr_counts, store_old_fields, xfield, dim, subgroup_path, p_list, global)
-    ! Reading particles from a python function
+  !! Initialise particles which are defined by a Python function
+  subroutine read_particles_from_python(n_particles, subgroup_name, subgroup_path, &
+       p_list, xfield, dim, &
+       current_time, state, &
+       attr_counts, global)
 
-    type(state_type), dimension(:), intent(in) :: state
-    type(vector_field), pointer, intent(in) :: xfield
-    type(detector_linked_list), intent(inout) :: p_list
+    !> Number of particles in this subgroup
+    integer, intent(in) :: n_particles
+    !> Name of the particles' subgroup
+    character(len=FIELD_NAME_LEN), intent(in) :: subgroup_name
+    !> Path prefix for the subgroup in options
     character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path
-    character(len=FIELD_NAME_LEN), intent(in) :: subname
+    !> Detector list to hold the particles
+    type(detector_linked_list), intent(inout) :: p_list
+    !> Coordinate vector field
+    type(vector_field), pointer, intent(in) :: xfield
+    !> Geometry dimension
+    integer, intent(in) :: dim
+    !> Current model time, for passing through to Python functions
     real, intent(in) :: current_time
-    integer, intent(in) :: sub_particles, dim
-    integer, dimension(3), intent(in) :: attribute_size
+    !> Model state structure
+    type(state_type), dimension(:), intent(in) :: state
+    !> Counts of attributes, old attributes, and old fields
+    !! for each scalar, vector and tensor
+    type(attr_counts_type), intent(in) :: attr_counts
+    !> Whether to consider this particle in a global element search
     logical, intent(in), optional :: global
 
+    integer :: i, str_size
     character(len=PYTHON_FUNC_LEN) :: func
-    character(len = FIELD_NAME_LEN) :: fmt
-    character(len=FIELD_NAME_LEN) :: particle_name
-    real, allocatable, dimension(:,:) :: coords !array to hold coordinates of particles for initialisation
+    character(len=FIELD_NAME_LEN) :: fmt, particle_name
+    real, allocatable, dimension(:,:) :: coords ! all particle coordinates, from python
     real :: dt
-    integer :: l, str_size
 
     ewrite(2,*) "Reading particles from options"
     call get_option(trim(subgroup_path)//"/initial_position/python", func)
@@ -331,17 +385,18 @@ contains
     allocate(coords(dim,sub_particles))
     call set_detector_coords_from_python(coords, sub_particles, func, current_time)
 
-    str_size=len_trim(int2str(sub_particles))
+    str_size = len_trim(int2str(sub_particles))
     fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
 
-    do l=1,sub_particles
-       write(particle_name, fmt) trim(subname)//"_", l
-       call create_single_particle(p_list, xfield, coords(:,l), &
-            l, LAGRANGIAN_DETECTOR, trim(particle_name), attribute_size, global=global)
+    do i = 1, n_particles
+      write(particle_name, fmt) trim(subgroup_name)//"_", i
+      call create_single_particle(p_list, xfield, coords(:,i), &
+           i, LAGRANGIAN_DETECTOR, trim(particle_name), attribute_size, global=global)
     end do
-    if (attribute_size(1)/=0) then
-       call update_particle_subgroup_attributes_and_fields(state, current_time, dt, subgroup_path, p_list)
-    end if
+
+    ! since the particles have only been initialised with their position
+    ! we need to update them to populate the attribute values too
+    call update_particle_subgroup_attributes_and_fields(state, current_time, dt, subgroup_path, p_list)
 
     deallocate(coords)
   end subroutine read_particles_from_python
@@ -355,20 +410,20 @@ contains
     !> counts of scalar/vector/tensor attributes
     integer, dimension(3), intent(in) :: counts
     !> attribute names to read from the file
-    character(*), dimension(:,3), pointer :: names
+    type(attr_names_type), intent(in) :: names
     !> SVT values to hold the output
-    type(svt_type), intent(inout) :: vals
+    type(attr_vals_type), intent(inout) :: vals
 
     integer :: i, j, k
     integer(kind=8) :: h5_ierror
 
     scalar_attr_loop: do i = 1, counts(1)
-      h5_ierror = h5pt_readdata_r8(h5_id, names(i,1), vals%s(i))
+      h5_ierror = h5pt_readdata_r8(h5_id, names%s(i), vals%s(i))
     end do scalar_attr_loop
 
     vector_attr_loop: do i = 1, counts(2)
       do j = 1, dim
-        h5_ierror = h5pt_readdata_r8(h5_id, names(i,2)//"_"//int2str(j), vals%v(j,i))
+        h5_ierror = h5pt_readdata_r8(h5_id, names%v(i)//"_"//int2str(j), vals%v(j,i))
       end do
     end do vector_attr_loop
 
@@ -376,46 +431,62 @@ contains
       do j = 1, dim
         do k = 1, dim
           h5_ierror = h5pt_readdata_r8(h5_id, &
-               names(i,3)//"_"//int2str(j)//int2str(k), &
-               vals%t(j,k,i)
+               names%t(i)//"_"//int2str(j)//int2str(k), &
+               vals%t(j,k,i))
         end do
       end do
     end do tensor_attr_loop
   end subroutine read_attrs
 
-  subroutine read_particles_from_file(sub_particles, subname, attr_counts, store_old_fields, state, &
-       xfield, dim, subgroup_path, p_list, number_of_partitions)
-    type(state_type), dimension(:), intent(in) :: state
-    type(vector_field), pointer, intent(in) :: xfield
-    type(detector_linked_list), intent(inout) :: p_list
+  !! Read particles in the given subgroup from a checkpoint file
+  subroutine read_particles_from_file(n_particles, subgroup_name, subgroup_path, &
+       p_list, xfield, dim, &
+       attr_counts, attr_names, old_attr_names, old_field_names, &
+       n_partitions)
+    !> Number of particles in this subgroup
+    integer, intent(in) :: n_particles
+    !> Name of the particles' subgroup
+    character(len=FIELD_NAME_LEN), intent(in) :: subgroup_name
+    !> Path prefix for the subgroup in options
     character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path
-    character(len=FIELD_NAME_LEN), intent(in) :: subname
-    integer, intent(in) :: sub_particles, dim
-    type(attr_counts), intent(in) :: attr_counts
-    logical, intent(in) :: store_old_fields
+    !> Detector list to hold the particles
+    type(detector_linked_list), intent(inout) :: p_list
+    !> Coordinate vector field
+    type(vector_field), pointer, intent(in) :: xfield
+    !> Geometry dimension
+    integer, intent(in) :: dim
+    !> Counts of attributes, old attributes, and old fields
+    !! for each scalar, vector and tensor
+    type(attr_counts_type), intent(in) :: attr_counts
+    !> Names of attributes to store on this subgroup
+    type(attr_names_type), intent(in) :: attr_names
+    !> The attributes for which an old value should be checkpointed
+    type(attr_names_type), intent(in) :: old_attr_names
+    !> Names of fields for which old values should be checkpointed
+    type(attr_names_type), intent(in) :: old_field_names
 
-    integer, intent(in), optional :: number_of_partitions
+    !> Optional parameter during recomposition to control the
+    !! processes which are involved in reading from file
+    integer, intent(in), optional :: n_partitions
 
-    type(svt_arrays), allocatable, attr_vals ! particle attribute values for initialisation
-    real, allocatable, dimension(:) :: positions ! particle coordinates if from checkpoint file
-
-    integer :: m, i, j, str_size, old_attrib, old_field, commsize, ierr, rank, id(1)
-    integer(kind=8) :: h5_ierror, h5_id, h5_prop, view_start, view_end
-    integer(kind=8), dimension(:), allocatable :: npoints
+    integer :: i
+    integer :: ierr, str_size, commsize, rank, id(1)
+    integer :: input_comm, world_group, input_group ! opaque MPI pointers
+    real, allocatable, dimension(:) :: positions ! particle coordinates
     character(len=OPTION_PATH_LEN) :: particles_cp_filename
-    character(len=FIELD_NAME_LEN) :: attname, particle_name, fmt
-    type(scalar_field), pointer :: sfield
-
-    integer :: input_comm, world_group, input_group
+    character(len=FIELD_NAME_LEN) :: particle_name, fmt
+    integer(kind=8) :: h5_ierror, h5_id, h5_prop, view_start, view_end ! h5hut state
+    integer(kind=8), dimension(:), allocatable :: npoints ! number of points for each rank to read
+    type(attr_vals_type), allocatable :: attr_vals, old_attr_vals, old_field_vals ! scalar/vector/tensor arrays
 
     ewrite(2,*) "Reading particles from file"
 
     ! create new mpi group for active particles only
     ! non-active processes are already not in this routine,
     ! so we don't have to worry about them
-    if (present(number_of_partitions)) then
+    if (present(n_partitions)) then
       call mpi_comm_group(MPI_COMM_FEMTOOLS, world_group, ierr)
-      call mpi_group_incl(world_group, number_of_partitions, [(i, i=0, number_of_partitions-1)], input_group, ierr)
+      call mpi_group_incl(world_group, n_partitions, [(i, i=0, n_partitions-1)], input_group, ierr)
       call mpi_comm_create_group(MPI_COMM_FEMTOOLS, input_group, 0, input_comm, ierr)
     else
       input_comm = MPI_COMM_FEMTOOLS
@@ -423,9 +494,11 @@ contains
 
     ! allocate arrays to hold positions and attributes for a single particle
     allocate(positions(dim))
-    allocate(attr_vals, dim, attr_counts%attrs)
+    call allocate(attr_vals, dim, attr_counts%attrs)
+    call allocate(old_attr_vals, dim, attr_counts%old_attrs)
+    call allocate(old_field_vals, dim, attr_counts%old_fields)
 
-    str_size = len_trim(int2str(sub_particles))
+    str_size = len_trim(int2str(n_particles))
     fmt = "(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
 
     ! set up the checkpoint file for reading
@@ -451,11 +524,11 @@ contains
     ! figure out our local offset into the file
     h5_ierror = h5pt_getview(h5_id, view_start, view_end)
 
-    do m = 1, npoints(rank+1)
-      write(particle_name, fmt) trim(subname)//"_", m
+    do i = 1, npoints(rank+1)
+      write(particle_name, fmt) trim(subgroup_name)//"_", i
 
       ! set view to read this particle
-      h5_ierror = h5pt_setview(h5_id, int(view_start + m - 1, 8), int(view_start + m - 1, 8))
+      h5_ierror = h5pt_setview(h5_id, int(view_start + i - 1, 8), int(view_start + i - 1, 8))
 
       if (dim >= 1) &
            h5_ierror = h5pt_readdata_r8(h5_id, "x", positions(1))
@@ -466,28 +539,10 @@ contains
 
       h5_ierror = h5pt_readdata_i4(h5_id, "id", id(1))
 
-      call read_attrs(h5_id, dim, attr_counts%attrs, attr_names%attrs, attr_vals)
-      call read_attrs(h5_id, dim, attr_counts%old_attrs, attr_names%old_attrs, old_attr_vals)
-      if (store_old_fields) then
-        call read_attrs(h5_id, dim, attr_counts%old_fields, attr_names%old_fields, old_field_vals)
-      end if
-
-      ! read in fields
-      old_field = 0
-      if (attribute_size(3) /= 0) then
-        do i = 1, size(state)
-          do j = 1, size(state(i)%scalar_names)
-            sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
-            if (sfield%option_path == "" .or. aliased(sfield)) then
-              cycle
-            else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-              old_field = old_field + 1
-              h5_ierror = h5pt_readdata_r8(h5_id, "field"//trim(state(i)%scalar_names(j)), attribute_vals(3, old_field))
-            end if
-          end do
-        end do
-      end if
-      assert(old_field == attribute_size(3))
+      ! batched reads of scalar, vector, tensor values of each kind of attribute
+      call read_attrs(h5_id, dim, attr_counts%attrs, attr_names, attr_vals)
+      call read_attrs(h5_id, dim, attr_counts%old_attrs, old_attr_names, old_attr_vals)
+      call read_attrs(h5_id, dim, attr_counts%old_fields, old_field_names, old_field_vals)
 
       ! don't use a global check for this particle
       call create_single_particle(p_list, xfield, &
@@ -497,11 +552,14 @@ contains
 
     h5_ierror = h5_closefile(h5_id)
 
-    deallocate(attribute_vals)
     deallocate(positions)
     deallocate(npoints)
 
-    if (present(number_of_partitions)) then
+    deallocate(attr_vals)
+    deallocate(old_attr_vals)
+    deallocate(old_field_vals)
+
+    if (present(n_partitions)) then
       call mpi_comm_free(input_comm, ierr)
       call mpi_group_free(input_group, ierr)
     end if
