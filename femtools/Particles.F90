@@ -336,7 +336,7 @@ contains
 
     old_i = 1
     do i = 1, count
-      call get_child_name(key, i, names(i))
+      call get_child_name(key, i-1, names(i))
       if (have_option(key//"/python_fields/store_old_attribute")) then
         call get_option(key//"/python_fields/store_old_attribute", old_names(old_i))
         ! prefix with "old_" to distinguish from current attribute
