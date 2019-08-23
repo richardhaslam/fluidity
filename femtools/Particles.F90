@@ -1146,25 +1146,21 @@ contains
 
   end subroutine update_particle_subgroup_fields
 
+  !! Write particle attributes for all groups that should output at the current time
   subroutine write_particles_loop(state, timestep, time)
-    !!Subroutine to loop over particle_lists and call write_particles for each list
+    !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
+    !> Current timestep
     integer, intent(in) :: timestep
+    !> Current model time
     real, intent(in) :: time
 
-    integer, dimension(3) :: attribute_dims
-    integer :: i, k, dim
+    integer :: i, k
     integer :: particle_groups, particle_subgroups, list_counter
-    integer, dimension(:), allocatable :: particle_arrays
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path
     logical :: output_group
 
-    !Check whether there are any particles.
-
     particle_groups = option_count("/particles/particle_group")
-    if (particle_groups==0) return
-
-    call get_option("/geometry/dimension",dim)
 
     ewrite(1,*) "In write_particles_loop"
 
@@ -1176,37 +1172,38 @@ contains
       output_group = should_output(output_CS(i), time, timestep, group_path)
       if (output_group) then
         call update_output_CS(output_CS(i), time)
+      else
+        ! skip all subgroups
+        list_counter = list_counter + particle_subgroups
+        cycle
       end if
 
       do k = 1, particle_subgroups
-        if (output_group) then
-          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-          attribute_dims(1) = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
-          attribute_dims(2) = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
-          attribute_dims(3) = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
-          call write_particles_subgroup(state, particle_lists(list_counter), attribute_dims, timestep, time, trim(subgroup_path))
+        subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
+        call write_particles_subgroup(state, particle_lists(list_counter), timestep, time, trim(subgroup_path))
           list_counter = list_counter + 1
-        end if
       end do
     end do
   end subroutine write_particles_loop
 
-  subroutine write_particles_subgroup(state, detector_list, attribute_dims, timestep, time, subgroup_path)
-    !!< Write values of particles to the previously opened particles file.
+  !> Write particle attributes for a given subgroup
+  subroutine write_particles_subgroup(state, detector_list, timestep, time, subgroup_path)
+    !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
+    !> The particle subgroup data structure
     type(detector_linked_list), intent(inout) :: detector_list
+    !> Current model timestep (to record in output file)
     integer, intent(in) :: timestep
+    !> Current model time (to record in output file)
     real, intent(in) :: time
-    integer, dimension(3), intent(in) :: attribute_dims
+    !> Path prefix for the subgroup in options
     character(len=*), intent(in) :: subgroup_path
 
-    integer :: dim, i, j, k, att, tot_atts
+    integer :: dim, i, tot_atts
     integer(kind=8) :: h5_ierror
     real, dimension(:,:), allocatable :: positions, attrib_data
     integer, dimension(:), allocatable :: node_ids
-    type(vector_field), pointer :: vfield
     type(detector_type), pointer :: node
-    character(len=FIELD_NAME_LEN) :: attname
 
     ewrite(1,*) "In write_particles"
 
@@ -1220,10 +1217,9 @@ contains
     ! set the number of particles this process is going to write
     h5_ierror = h5pt_setnpoints(detector_list%h5_id, int(detector_list%length, 8))
 
-    ! set up arrays to hold all node data (this won't work with large numbers of particles)
-    vfield => extract_vector_field(state, "Coordinate")
-    dim = vfield%dim
-    tot_atts = attribute_dims(1) + dim*attribute_dims(2) + dim*dim*attribute_dims(3)
+    ! set up arrays to hold all node data
+    call get_option("/geometry/dimension", dim)
+    tot_atts = detector_list%total_attributes(1)
     allocate(positions(detector_list%length, 3))
     allocate(attrib_data(detector_list%length, tot_atts))
     allocate(node_ids(detector_list%length))
@@ -1254,52 +1250,69 @@ contains
 
     h5_ierror = h5pt_writedata_i4(detector_list%h5_id, "id", node_ids(:))
 
-    ! write out attributes -- scalar, vector, tensor
-    att = 1
-    scalar_attribute_loop: do i = 1, attribute_dims(1)
-      call get_option(subgroup_path // "/attributes/scalar_attribute["//int2str(i-1)//"]/name", attname)
-      h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname), attrib_data(:,att))
-      att = att + 1
-    end do scalar_attribute_loop
-
-    vector_attribute_loop: do i = 1, attribute_dims(2)
-      call get_option(subgroup_path // "/attributes/vector_attribute["//int2str(i-1)//"]/name", attname)
-      do j = 1, dim
-        h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname)//"_"//int2str(j), attrib_data(:,att))
-        att = att + 1
-      end do
-    end do vector_attribute_loop
-
-    tensor_attribute_loop: do i = 1, attribute_dims(3)
-      call get_option(subgroup_path // "/attributes_tensor_attribute["//int2str(i-1)//"]/name", attname)
-      do j = 1, dim
-        do k = 1, dim
-          h5_ierror = h5pt_writedata_r8(detector_list%h5_id, trim(attname)//"_"//int2str(j)//int2str(k), attrib_data(:,att))
-          att = att + 1
-        end do
-      end do
-    end do tensor_attribute_loop
+    call write_attrs(detector_list%h5_id, dim, detector_list%attr_names, attrib_data)
 
     deallocate(node_ids)
     deallocate(attrib_data)
     deallocate(positions)
   end subroutine write_particles_subgroup
 
+  !> Write attributes with given names to an H5Part file
+  subroutine write_attrs(h5_id, dim, names, vals)
+    !> h5 file to write to
+    integer(kind=8), intent(in) :: h5_id
+    !> spatial dimension
+    integer, intent(in) :: dim
+    !> attribute names to write to the file
+    type(attr_names_type), intent(in) :: names
+    !> attribute values, ordered by position/rank as they are on particles
+    real, dimension(:,:), intent(in) :: vals
+
+    integer :: i, j, k, att
+    integer(kind=8) :: h5_ierror
+
+    ! write out attributes -- scalar, vector, tensor
+    att = 1
+    scalar_attr_loop: do i = 1, size(names%s)
+      h5_ierror = h5pt_writedata_r8(h5_id, &
+           trim(names%s(i)), vals(:,att))
+      att = att + 1
+    end do scalar_attr_loop
+
+    vector_attr_loop: do i = 1, size(names%v)
+      do j = 1, dim
+        h5_ierror = h5pt_writedata_r8(h5_id, &
+             trim(names%v(i))//"_"//int2str(j), vals(:,att))
+        att = att + 1
+      end do
+    end do vector_attr_loop
+
+    tensor_attr_loop: do i = 1, size(names%t)
+      do j = 1, dim
+        do k = 1, dim
+          h5_ierror = h5pt_writedata_r8(h5_id, &
+               trim(names%t(i))//"_"//int2str(j)//int2str(k), vals(:,att))
+          att = att + 1
+        end do
+      end do
+    end do tensor_attr_loop
+  end subroutine write_attrs
+
+  !> Checkpoint all particles, by subgroup
   subroutine checkpoint_particles_loop(state, prefix, postfix, cp_no, number_of_partitions)
-    !! Checkpoint particles within each particle subgroup
+    !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
-    character(len = *), intent(in) :: prefix
-    character(len = *), intent(in) :: postfix
-    integer, optional, intent(in) :: cp_no !! Checkpoint number of the simulation
-    integer, optional, intent(in) :: number_of_partitions !! Only write data for this many processes
+    !> Checkpoint filename prefix
+    character(len=*), intent(in) :: prefix
+    !> Checkpoint filename postfix (e.g. flredecomp)
+    character(len=*), intent(in) :: postfix
+    !> Checkpoint number of the simulation
+    integer, optional, intent(in) :: cp_no
+    !> Only write data for this many processes (flredecomp to more partitions needs this)
+    integer, optional, intent(in) :: number_of_partitions
 
-    character(len=OPTION_PATH_LEN) :: lpostfix
+    integer :: i, j, particle_groups, particle_subgroups, list_counter
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path, subgroup_path_name, name
-
-    integer, dimension(3) :: attributes, old_attributes
-    logical :: old_fields
-    integer :: nscalar, nvector, ntensor, tot_fields
-    integer :: i, m, k, particle_groups, particle_subgroups, list_counter, dim
 
     integer :: output_comm, world_group, output_group, ierr
 
@@ -1316,124 +1329,71 @@ contains
       output_comm = MPI_COMM_FEMTOOLS
     end if
 
-    ! Check whether there are any particle groups
     particle_groups = option_count("/particles/particle_group")
-    if (particle_groups == 0) return
-    call get_option("/geometry/dimension",dim)
 
     ewrite(1, *) "Checkpointing particles"
 
     assert(len_trim(prefix) > 0)
-    lpostfix = postfix
-
-    ! Number of old_fields stored on particles
-    nscalar = option_count('/material_phase/scalar_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/scalar_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/scalar_field/diagnostic/particles/include_in_particles/store_old_field')
-    nvector = option_count('/material_phase/vector_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/vector_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/vector_field/diagnostic/particles/include_in_particles/store_old_field')
-    ntensor = option_count('/material_phase/tensor_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/tensor_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/tensor_field/diagnostic/particles/include_in_particles/store_old_field')
-
-    tot_fields = nscalar + dim*nvector + dim*dim*ntensor
 
     list_counter = 1
     do i = 1, particle_groups
       group_path = "/particles/particle_group["//int2str(i-1)//"]"
       particle_subgroups = option_count(trim(group_path) // "/particle_subgroup")
-      do k = 1, particle_subgroups
+      do j = 1, particle_subgroups
         ! set the path to this subgroup, and the path used in update_particle_options
-         subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-         subgroup_path_name = trim(group_path) // "/particle_subgroup::"
+        subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(j-1)//"]"
+        subgroup_path_name = trim(group_path) // "/particle_subgroup::"
+        call get_option(trim(subgroup_path) // "/name", name)
 
-         ! skip checkpointing this subgroup if we're coming from flredecomp
-         ! and the particles weren't loaded from a file
-         if (present(number_of_partitions) .and. &
-              .not. have_option(trim(subgroup_path) // "/initial_position/from_file")) then
-           cycle
-         end if
+        ! skip checkpointing this subgroup if we're coming from flredecomp
+        ! and the particles weren't loaded from a file
+        if (present(number_of_partitions) .and. &
+             .not. have_option(trim(subgroup_path) // "/initial_position/from_file")) then
+          cycle
+        end if
 
-         ! count number of attributes in this subgroup
-         attributes(1) = option_count(trim(subgroup_path) // '/attributes/scalar_attribute')
-         attributes(2) = option_count(trim(subgroup_path) // '/attributes/vector_attribute')
-         attributes(3) = option_count(trim(subgroup_path) // '/attributes/tensor_attribute')
-
-         ! Get number of old fields and old attributes
-         old_attributes(:) = 0
-         old_fields = .false.
-         do m = 1, attributes(1)
-           if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields")) then
-             old_fields = .true.
-             if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               old_attributes(1) = old_attributes(1) + 1
-             end if
-           end if
-         end do
-         do m = 1,attributes(2)
-           if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields")) then
-             old_fields = .true.
-             if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               old_attributes(2) = old_attributes(2) + 1
-             end if
-           end if
-         end do
-         do m = 1,attributes(3)
-           if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields")) then
-             old_fields = .true.
-             if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-               old_attributes(3) = old_attributes(3) + 1
-             end if
-           end if
-         end do
-         call get_option(trim(subgroup_path) // "/name", name)
-         call checkpoint_particles_subgroup(state, prefix, lpostfix, cp_no, particle_lists(list_counter), &
-              attributes, old_attributes, tot_fields, name, subgroup_path, subgroup_path_name, output_comm)
+        call checkpoint_particles_subgroup(state, prefix, postfix, cp_no, particle_lists(list_counter), &
+             name, subgroup_path, subgroup_path_name, output_comm)
           list_counter = list_counter + 1
        end do
      end do
 
-     if (.not. old_fields) tot_fields = 0
-
+     ! clean up mpi structures
      if (present(number_of_partitions)) then
        call mpi_comm_free(output_comm, ierr)
        call mpi_group_free(output_group, ierr)
      end if
   end subroutine checkpoint_particles_loop
 
-  subroutine checkpoint_particles_subgroup(state, prefix, lpostfix, cp_no, particle_list, &
-       attributes, old_attributes, tot_fields, name, subgroup_path, subgroup_path_name, output_comm)
-    !!<Checkpoint Particles
-
+  !> Checkpoint a single particle subgroup
+  subroutine checkpoint_particles_subgroup(state, prefix, postfix, cp_no, particle_list, &
+       name, subgroup_path, subgroup_path_name, output_comm)
+    !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
-    character(len = *), intent(in) :: prefix
-    character(len = *), intent(in) :: lpostfix
-    integer, optional, intent(in) :: cp_no !Checkpoint number of the simulation
-    character(len = *), intent(in) :: name
-    character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path, subgroup_path_name
-
+    !> Checkpoint filename prefix
+    character(len=*), intent(in) :: prefix
+    !> Checkpoint filename postfix
+    character(len=*), intent(in) :: postfix
+    !> Checkpoint number of the simulation
+    integer, optional, intent(in) :: cp_no
+    !> Particle list for the subgroup
     type(detector_linked_list), intent(inout) :: particle_list
-    integer, dimension(3), intent(in) :: attributes, old_attributes
-    integer, intent(in) :: tot_fields
-
-    integer, optional, intent(in) :: output_comm !! MPI communicator to use for output/collectives
+    !> Particle subgroup name
+    character(len=*), intent(in) :: name
+    !> Option subgroup path, and the prefix used for updating options
+    character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path, subgroup_path_name
+    !> MPI communicator to use for output/collectives
+    integer, optional, intent(in) :: output_comm
 
     character(len=OPTION_PATH_LEN) :: particles_cp_filename
-    character(len=FIELD_NAME_LEN) :: attname
-    integer :: i, j, k, dim, att, old_attrib, old_field, commsize, ierr
-    integer :: tot_attribs, tot_old_attribs
-    integer :: phase, field
+    integer :: i, dim, tot_attrs, tot_old_attrs, tot_old_fields
+    real, dimension(:,:), allocatable :: positions, attr_data, old_attr_data, old_field_data
     integer(kind=8) :: h5_id, h5_prop, h5_ierror
     integer(kind=8), dimension(:), allocatable :: npoints
-    real, dimension(:,:), allocatable :: positions, attrib_data, old_attrib_data, old_field_data
     integer, dimension(:), allocatable :: node_ids
-    type(vector_field), pointer :: vfield
-    type(scalar_field), pointer :: sfield
-    type(tensor_field), pointer :: tfield
     type(detector_type), pointer :: node
 
-    integer :: comm
+    integer :: comm, commsize, ierr
     comm = MPI_COMM_FEMTOOLS
     if (present(output_comm)) comm = output_comm
 
@@ -1449,7 +1409,7 @@ contains
     ! construct a new particle checkpoint filename
     particles_cp_filename = trim(prefix)
     if(present(cp_no)) particles_cp_filename = trim(particles_cp_filename) // "_" // int2str(cp_no)
-    particles_cp_filename = trim(particles_cp_filename) // "_" // trim(lpostfix)
+    particles_cp_filename = trim(particles_cp_filename) // "_" // trim(postfix)
     particles_cp_filename = trim(particles_cp_filename) // "_particles." // trim(name) // ".h5part"
 
     ! restrict h5 IO to the specified communicator
@@ -1467,30 +1427,31 @@ contains
     h5_ierror = h5pt_setnpoints(h5_id, int(particle_list%length, 8))
 
     ! get dimension of particle positions
-    vfield => extract_vector_field(state(1), "Coordinate")
-    dim = vfield%dim
+    call get_option("/geometry/dimension", dim)
 
-    tot_attribs = attributes(1) + dim*attributes(2) + dim*dim*attributes(3)
-    tot_old_attribs = old_attributes(1) + dim*old_attributes(2) + dim*dim*old_attributes(3)
+    tot_attrs = particle_list%total_attributes(1)
+    tot_old_attrs = particle_list%total_attributes(2)
+    tot_old_fields = particle_list%total_attributes(3)
 
     ! allocate arrays for node data
     allocate(positions(particle_list%length, dim))
     allocate(node_ids(particle_list%length))
-    allocate(attrib_data(particle_list%length, tot_attribs))
-    allocate(old_attrib_data(particle_list%length, tot_old_attribs))
-    allocate(old_field_data(particle_list%length, tot_fields))
+    allocate(attr_data(particle_list%length, tot_attrs))
+    allocate(old_attr_data(particle_list%length, tot_old_attrs))
+    allocate(old_field_data(particle_list%length, tot_old_fields))
 
+    ! gather data off all particles
     node => particle_list%first
     positionloop_cp: do i = 1, particle_list%length
       ! collect positions
       assert(size(node%position) == dim)
 
       positions(i,:) = node%position(:)
-      if (tot_attribs /= 0) &
-           attrib_data(i,:) = node%attributes(:)
-      if (tot_old_attribs /= 0) &
-           old_attrib_data(i,:) = node%old_attributes(:)
-      if (tot_fields /= 0) &
+      if (tot_attrs /= 0) &
+           attr_data(i,:) = node%attributes(:)
+      if (tot_old_attrs /= 0) &
+           old_attr_data(i,:) = node%old_attributes(:)
+      if (tot_old_fields /= 0) &
            old_field_data(i,:) = node%old_fields(:)
 
       ! collect node ids
@@ -1499,122 +1460,31 @@ contains
       node => node%next
     end do positionloop_cp
 
-    ! write out position
+    ! write out positions and ids
     if (dim >= 1) &
          h5_ierror = h5pt_writedata_r8(h5_id, "x", positions(:,1))
     if (dim >= 2) &
          h5_ierror = h5pt_writedata_r8(h5_id, "y", positions(:,2))
     if (dim >= 3) &
          h5_ierror = h5pt_writedata_r8(h5_id, "z", positions(:,3))
-
     h5_ierror = h5pt_writedata_i4(h5_id, "id", node_ids(:))
 
-    ! attributes and old attributes
-    if (tot_attribs /= 0) then
-      att = 0
-      old_attrib = 0
-      scalar_attribute_loop: do i = 1, attributes(1)
-        call get_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(i-1)//"]/name", attname)
-        att = att + 1
-        h5_ierror = h5pt_writedata_r8(h5_id, trim(attname), attrib_data(:,att))
-
-        ! collapse in old attribute loop
-        if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
-          old_attrib = old_attrib + 1
-          h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname), old_attrib_data(:,old_attrib))
-        end if
-      end do scalar_attribute_loop
-
-      vector_attribute_loop: do i = 1, attributes(2)
-        call get_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(i-1)//"]/name", attname)
-        do j = 1, dim
-          att = att + 1
-          h5_ierror = h5pt_writedata_r8(h5_id, trim(attname)//"_"//int2str(j), attrib_data(:,att))
-        end do
-
-        if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
-          do j = 1, dim
-            old_attrib = old_attrib + 1
-            h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname)//"_"//int2str(j), old_attrib_data(:,old_attrib))
-          end do
-        end if
-      end do vector_attribute_loop
-
-      tensor_attribute_loop: do i = 1, attributes(3)
-        call get_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(i-1)//"]/name", attname)
-        do j = 1, dim
-          do k = 1, dim
-            att = att + 1
-            h5_ierror = h5pt_writedata_r8(h5_id, trim(attname)//"_"//int2str(j)//int2str(k), attrib_data(:,att))
-          end do
-        end do
-
-        if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(i-1)//"]/python_fields/store_old_attribute")) then
-          do j = 1, dim
-            do k = 1, dim
-              old_attrib = old_attrib + 1
-              h5_ierror = h5pt_writedata_r8(h5_id, "old"//trim(attname)//"_"//int2str(j)//int2str(k), old_attrib_data(:,old_attrib))
-            end do
-          end do
-        end if
-      end do tensor_attribute_loop
-    end if
-    assert(old_attrib == tot_old_attribs)
-
-    old_field = 0
-    if (tot_fields /= 0) then
-      do phase = 1, size(state)
-        scalar_field_loop: do field = 1, size(state(phase)%scalar_names)
-          sfield => extract_scalar_field(state(phase), state(phase)%scalar_names(field))
-          if (sfield%option_path == "" .or. aliased(sfield)) then
-            cycle
-          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-            old_field = old_field + 1
-            h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%scalar_names(field)), old_field_data(:,old_field))
-          end if
-        end do scalar_field_loop
-
-        vector_field_loop: do field = 1, size(state(phase)%vector_names)
-          vfield => extract_vector_field(state(phase), state(phase)%vector_names(field))
-          if (vfield%option_path == "" .or. aliased(vfield)) then
-            cycle
-          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-            do j = 1, dim
-              old_field = old_field + 1
-              h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%vector_names(field))//"_"//int2str(j), old_field_data(:,old_field))
-            end do
-          end if
-        end do vector_field_loop
-
-        tensor_field_loop: do field = 1, size(state(phase)%tensor_names)
-          tfield => extract_tensor_field(state(phase), state(phase)%tensor_names(field))
-          if (tfield%option_path == "" .or. aliased(tfield)) then
-            cycle
-          else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-            do j = 1, dim
-              do k = 1, dim
-                old_field = old_field + 1
-                h5_ierror = h5pt_writedata_r8(h5_id, "field"//trim(state(phase)%tensor_names(field))//"_"//int2str(j)//int2str(k), old_field_data(:,old_field))
-              end do
-            end do
-          end if
-        end do tensor_field_loop
-      end do
-    end if
-    assert(old_field == tot_fields)
+    call write_attrs(h5_id, dim, particle_list%attr_names, attr_data)
+    call write_attrs(h5_id, dim, particle_list%old_attr_names, old_attr_data)
+    call write_attrs(h5_id, dim, particle_list%old_field_names, old_field_data)
 
     ! update schema file to read this subgroup from the checkpoint file
-    call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, tot_attribs, subgroup_path_name)
+    call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, &
+         tot_attrs, subgroup_path_name)
 
     deallocate(old_field_data)
-    deallocate(old_attrib_data)
+    deallocate(old_attr_data)
     deallocate(node_ids)
-    deallocate(attrib_data)
+    deallocate(attr_data)
     deallocate(positions)
     deallocate(npoints)
 
     h5_ierror = h5_closefile(h5_id)
-
   end subroutine checkpoint_particles_subgroup
 
   subroutine update_particle_subgroup_options(filename, particle_list, name, tot_atts, subgroup_path_name)
