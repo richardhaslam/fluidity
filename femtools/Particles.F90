@@ -724,93 +724,19 @@ contains
     end if
   end subroutine copy_attrs
 
+  !! Call move_lagrangian_detectors on all tracked particle groups
   subroutine move_particles(state, dt, timestep)
-    !!Routine to loop over particle arrays and call move_lagrangian_detectors
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: dt
     integer, intent(in) :: timestep
 
-    integer, dimension(3) :: attribute_size
-    integer :: particle_groups, list_counter, dim
-    integer, dimension(:), allocatable :: particle_arrays
-    integer :: i, m, k
-    integer :: nscalar, nvector, ntensor
-    character(len = OPTION_PATH_LEN) :: group_path, subgroup_path
+    integer :: i
 
-    !Check whether there are any particles.
-
-    particle_groups = option_count("/particles/particle_group")
-    if (particle_groups==0) return
-
-    call get_option("/geometry/dimension",dim)
-
-    !Number of old_fields stored on particles
-    nscalar = option_count('/material_phase/scalar_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/scalar_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/scalar_field/diagnostic/particles/include_in_particles/store_old_field')
-    nvector = option_count('/material_phase/vector_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/vector_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/vector_field/diagnostic/particles/include_in_particles/store_old_field')
-    ntensor = option_count('/material_phase/tensor_field/prognostic/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/tensor_field/prescribed/particles/include_in_particles/store_old_field') &
-    + option_count('/material_phase/tensor_field/diagnostic/particles/include_in_particles/store_old_field')
-
-    !Set up particle_lists
-    allocate(particle_arrays(particle_groups))
-    particle_arrays(:) = 0
-    do i = 1,particle_groups
-       particle_arrays(i) = option_count("/particles/particle_group["//int2str(i-1)//"]/particle_subgroup")
-    end do
     ewrite(2,*) "In move_particles"
-    list_counter = 1
-
-    !Loop over all particle arrays
-    do i = 1, particle_groups
-       group_path = "/particles/particle_group["//int2str(i-1)//"]"
-       do k = 1, particle_arrays(i)
-          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-          attribute_size(1)=0
-
-          !Get attribute_size
-          if (have_option(trim(subgroup_path) // "/attributes")) then
-             attribute_size(1)=option_count(trim(subgroup_path) // "/attributes/scalar_attribute")
-             attribute_size(1)=attribute_size(1)+dim*option_count(trim(subgroup_path) // "/attributes/vector_attribute")
-             attribute_size(1)=attribute_size(1)+(dim**2)*option_count(trim(subgroup_path) // "/attributes/tensor_attribute")
-          end if
-          attribute_size(2)=0
-          attribute_size(3)=0
-
-          !Get attribute size of old_fields and old_attributes
-          do m = 1,option_count(trim(subgroup_path) // "/attributes/scalar_attribute")
-             if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-                attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
-                if (have_option(trim(subgroup_path) // "/attributes/scalar_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-                   attribute_size(2)=attribute_size(2)+1
-                end if
-             end if
-          end do
-          do m = 1,option_count(trim(subgroup_path) // "/attributes/vector_attribute")
-             if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-                attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
-                if (have_option(trim(subgroup_path) // "/attributes/vector_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-                   attribute_size(2)=attribute_size(2)+dim
-                end if
-             end if
-          end do
-          do m = 1,option_count(trim(subgroup_path) // "/attributes/tensor_attribute")
-             if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields")) then!!!check if this numbering works
-                attribute_size(3) = nscalar + dim*nvector + ntensor*(dim**2)
-                if (have_option(trim(subgroup_path) // "/attributes/tensor_attribute["//int2str(m-1)//"]/python_fields/store_old_attribute")) then
-                   attribute_size(2)=attribute_size(2)+(dim**2)
-                end if
-             end if
-          end do
-          call move_lagrangian_detectors(state, particle_lists(list_counter), dt, timestep, attribute_size)
-          list_counter = list_counter + 1
-       end do
+    do i = 1, size(particle_lists)
+      call move_lagrangian_detectors(state, particle_lists(i), dt, timestep, &
+           particle_lists(i)%total_attributes)
     end do
-    deallocate(particle_arrays)
-
   end subroutine move_particles
 
   subroutine update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, p_list)
