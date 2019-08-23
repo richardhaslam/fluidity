@@ -343,6 +343,7 @@ contains
     integer, intent(out) :: count, old_count
 
     integer :: i, old_i
+    character(len=FIELD_NAME_LEN) :: subkey
 
     ! get option count so we can allocate the names array
     count = option_count(key)
@@ -352,11 +353,13 @@ contains
 
     old_i = 1
     do i = 1, count
-      call get_child_name(key, i-1, names(i))
-      if (have_option(key//"/python_fields/store_old_attribute")) then
-        call get_option(key//"/python_fields/store_old_attribute", old_names(old_i))
+      ! get the attribute's name
+      write(subkey, "(a,'[',i0,']')") key, i-1
+      call get_option(trim(subkey)//"/name", names(i))
+
+      if (have_option(trim(subkey)//"/python_fields/store_old_attribute")) then
         ! prefix with "old_" to distinguish from current attribute
-        old_names(old_i) = "old_"//trim(old_names(old_i))
+        old_names(old_i) = "old_"//trim(names(i))
         old_i = old_i + 1
       end if
     end do
