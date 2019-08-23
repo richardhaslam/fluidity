@@ -119,6 +119,8 @@ module detector_data_types
      integer :: num_sfields = 0   ! Total number of scalar fields across all phases
      integer :: num_vfields = 0   ! Total number of vector fields across all phases
 
+     !! Total number of arrays stored for attributes and fields on a particle subgroup
+     integer, dimension(3) :: total_attributes
      !! Names of attributes and fields stored in a particle subgroup
      type(attr_names_type) :: attr_names, old_attr_names, old_field_names
 

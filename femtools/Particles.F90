@@ -251,6 +251,11 @@ contains
           call option_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
                attr_names%t, old_attr_names%t, attr_counts%attrs(3), attr_counts%old_attrs(3))
 
+          ! save names in the detector list -- this will allocate and assign values
+          ! as expected
+          particle_lists(list_counter)%attr_names = attr_names
+          particle_lists(list_counter)%old_attr_names = old_attr_names
+
           ! If any attributes are from fields, we'll need to store old fields too
           store_old_fields = .false.
           if (option_count(trim(subgroup_path) // "/attributes/scalar_attribute/python_fields") > 0 .or. &
@@ -261,9 +266,20 @@ contains
 
           if (store_old_fields) then
             attr_counts%old_fields(:) = field_counts(:)
+            ! only copy old field names if they're required
+            particle_lists(list_counter)%old_field_names = old_field_names
           else
             attr_counts%old_fields(:) = 0
           end if
+
+          ! assign the total number of list slices for each kind of attribute
+          ! this is used mostly for transferring detectors across processes
+          particle_lists(list_counter)%total_attributes(1) = &
+               total_attributes(attr_counts%attrs, dim)
+          particle_lists(list_counter)%total_attributes(2) = &
+               total_attributes(attr_counts%old_attrs, dim)
+          particle_lists(list_counter)%total_attributes(3) = &
+               total_attributes(attr_counts%old_fields, dim)
 
           ! Enable particles to drift with the mesh
           if (have_option("/particles/move_with_mesh")) then
