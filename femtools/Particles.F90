@@ -770,177 +770,192 @@ contains
     end do
   end subroutine move_particles
 
-  subroutine update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, p_list)
-    !!Routine to set particle attributes
+  subroutine update_particle_attributes_and_fields(state, time)
+    !!Routine to loop over particle arrays and update particle attributes
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: time
+    real :: dt
+    type(vector_field), pointer :: xfield
+    type(detector_type), pointer :: particle
+    character(len = OPTION_PATH_LEN) :: group_path, subgroup_path
+
+    integer :: i, k
+    integer :: particle_groups, list_counter
+    integer, dimension(:), allocatable :: particle_arrays
+
+    !Check whether there are any particles.
+
+    particle_groups = option_count("/particles/particle_group")
+    if (particle_groups==0) return
+
+    !Set up particle_lists
+    allocate(particle_arrays(particle_groups))
+    particle_arrays(:) = 0
+    do i = 1,particle_groups
+       particle_arrays(i) = option_count("/particles/particle_group["//int2str(i-1)//"]/particle_subgroup")
+    end do
+
+    ewrite(2,*) "In update_particle_attributes_and_fields"
+
+    !Allocate parameters
+    xfield=>extract_vector_field(state(1), "Coordinate")
+    call get_option("/timestepping/timestep", dt)
+    list_counter = 1
+
+    !Update particle attributes by array
+    do i = 1,particle_groups
+       group_path = "/particles/particle_group["//int2str(i-1)//"]"
+       do k = 1, particle_arrays(i)
+          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
+          if (particle_lists(list_counter)%length==0) then
+             list_counter = list_counter + 1
+             cycle
+          end if
+          particle => particle_lists(list_counter)%first
+          if (size(particle%attributes)/=0) then
+             call update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, particle_lists(list_counter))
+          end if
+          list_counter = list_counter + 1
+       end do
+    end do
+  end subroutine update_particle_attributes_and_fields
+
+  !> Set particle attributes for a single subgroup
+  subroutine update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, p_list)
+    !> Model state structure
+    type(state_type), dimension(:), intent(in) :: state
+    !> Current model time
+    real, intent(in) :: time
+    !> Model timestep
     real, intent(in) :: dt
+    !> Option path for the subgroup
     character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path
+    !> Subgroup particle list
     type(detector_linked_list), intent(in) :: p_list
 
     character(len=PYTHON_FUNC_LEN) :: func
     type(detector_type), pointer :: particle
+    character(len=OPTION_PATH_LEN) :: attr_key
 
     real, allocatable, dimension(:,:) :: positions
     real, allocatable, dimension(:,:) :: attribute_array
     real, allocatable, dimension(:,:) :: old_attributes
-    character, allocatable, dimension(:,:) :: old_att_names
-    character(len = OPTION_PATH_LEN) :: old_name
+    real, allocatable, dimension(:,:) :: lcoords
+    integer, allocatable, dimension(:) :: ele
 
     real :: constant
     real, allocatable, dimension(:) :: vconstant
     real, allocatable, dimension(:,:) :: tconstant
-    integer :: j, nparticles, l, m, n, dim, i
-    integer :: nscalar, nvector, ntensor
-    integer, allocatable, dimension(:) :: store_old_att
-    real, allocatable, dimension(:,:) :: lcoords
-    integer, allocatable, dimension(:) :: ele
-    integer, dimension(3) :: n_oldatts !number of old scalar, vector and tensor attributes
+    integer :: i, j, nparticles, l, m, n, dim
 
-    !Check if this processor contains particles
     nparticles = p_list%length
-
-    if (nparticles==0) then
+    if (nparticles == 0) then
        return
     end if
 
-    call get_option("/geometry/dimension",dim)
+    call get_option("/geometry/dimension", dim)
+    allocate(vconstant(dim))
+    allocate(tconstant(dim, dim))
 
-    !Set parameters to calculate attributes
+    ! allocate space to hold data for all particles in the group
     particle => p_list%first
-    allocate(positions(size(particle%position),nparticles))
-    allocate(attribute_array(size(particle%attributes),nparticles))
-    allocate(lcoords(size(particle%local_coords),nparticles))
+    allocate(positions(size(particle%position), nparticles))
+    allocate(attribute_array(size(particle%attributes), nparticles))
+    allocate(lcoords(size(particle%local_coords), nparticles))
     allocate(ele(nparticles))
-    allocate(old_attributes(size(particle%old_attributes),nparticles))
+    allocate(old_attributes(size(particle%old_attributes), nparticles))
 
-    n_oldatts(1) = option_count(trim(subgroup_path) //"/attributes/scalar_attribute/python_fields/store_old_attribute")
-    n_oldatts(2) = option_count(trim(subgroup_path) //"/attributes/vector_attribute/python_fields/store_old_attribute")
-    n_oldatts(3) = option_count(trim(subgroup_path) //"/attributes/tensor_attribute/python_fields/store_old_attribute")
-    allocate(old_att_names(FIELD_NAME_LEN,sum(n_oldatts)))
-
-    particle => p_list%first
-    do j = 1,nparticles
-       positions(:,j) = particle%position
-       lcoords(:,j) = particle%local_coords
-       ele(j) = particle%element
-       old_attributes(:,j) = particle%old_attributes
+    ! copy the data
+    do i = 1, nparticles
+       positions(:,i) = particle%position
+       lcoords(:,i) = particle%local_coords
+       ele(i) = particle%element
+       old_attributes(:,i) = particle%old_attributes
        particle => particle%next
     end do
 
-    !get number of scalar, vector and tensor attributes
-    nscalar = option_count(trim(subgroup_path) // "/attributes/scalar_attribute")
-    nvector = option_count(trim(subgroup_path) // "/attributes/vector_attribute")
-    ntensor = option_count(trim(subgroup_path) // "/attributes/tensor_attribute")
+    ! calculate new values for all attributes
+    do n = 1, nscalar
+      attr_key = trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']'
 
-    l=1
-    particle => p_list%first
-    !set old scalar attribute names
-    do n = 1,nscalar
-       if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-          call get_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/name', old_name)
-          old_att_names(1,l) = 'O'
-          old_att_names(2,l) = 'l'
-          old_att_names(3,l) = 'd'
-          do j = 4,len_trim(old_name)+3
-             old_att_names(j,l)=old_name(j-3:j-3)
-          end do
-          old_att_names(j,l) = C_NULL_CHAR
-          l=l+1
-       end if
-    end do
-    !set old vector attribute names
-    do n = 1,nvector
-       if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-          call get_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/name', old_name)
-          old_att_names(1,l) = 'O'
-          old_att_names(2,l) = 'l'
-          old_att_names(3,l) = 'd'
-          do j = 4,len_trim(old_name)+3
-             old_att_names(j,l)=old_name(j-3:j-3)
-          end do
-          old_att_names(j,l) = C_NULL_CHAR
-          l=l+1
-       end if
-    end do
-    !set old tensor attribute names
-    do n = 1,ntensor
-       if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-          call get_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/name', old_name)
-          old_att_names(1,l) = 'O'
-          old_att_names(2,l) = 'l'
-          old_att_names(3,l) = 'd'
-          do j = 4,len_trim(old_name)+3
-             old_att_names(j,l)=old_name(j-3:j-3)
-          end do
-          old_att_names(j,l) = C_NULL_CHAR
-          l=l+1
-       end if
+      if (have_option(trim(attr_key)//'/constant')) then
+        call get_option(trim(attr_key)//'/constant', constant)
+        attribute_array(n,:) = constant
+
+      else if (have_option(trim(attr_key)//'/python')) then
+        call get_option(trim(attr_key)//'/python', func)
+        call set_particle_scalar_attribute_from_python(attribute_array(n,:), positions(:,:), nparticles, func, time, dt)
+
+      else if (have_option(trim(attr_key)//'/python_fields')) then
+        call get_option(trim(attr_key)//'/python_fields', func)
+        ! TODO
+        call set_particle_scalar_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
+             attribute_array(n,:), n_oldatts, old_att_names, old_attributes, func, time, dt)
+
+      else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
+        particle => p_list%first
+        attribute_array(n,:) = particle%attributes(n)
+      end if
     end do
 
-    !Update scalar attributes, then vector attributes, then tensor attributes
-    do n = 1,nscalar
-       if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/constant')) then
-          call get_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/constant', constant)
-          attribute_array(n,:) = constant
-       else if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python')) then
-          call get_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python', func)
-          call set_particle_scalar_attribute_from_python(attribute_array(n,:), positions(:,:), nparticles, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields')) then
-          call get_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields', func)
-          call set_particle_scalar_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-               & attribute_array(n,:), n_oldatts, old_att_names, old_attributes, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/from_checkpoint_file')) then
-          particle => p_list%first
-          attribute_array(n,:) = particle%attributes(n)
-       end if
+    do n = 1, nvector
+      attr_key = trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']'
+
+      if (have_option(trim(attr_key)//'/constant')) then
+        call get_option(trim(attr_key)//'/constant', vconstant)
+        do i = 1, dim
+          attribute_array(nscalar+i+((n-1)*dim),:) = vconstant(i)
+        end do
+
+      else if (have_option(trim(attr_key)//'/python')) then
+        call get_option(trim(attr_key)//'/python', func)
+        call set_particle_vector_attribute_from_python( &
+             attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), &
+             positions(:,:), nparticles, func, time, dt)
+
+      else if (have_option(trim(attr_key)//'/python_fields')) then
+        call get_option(trim(attr_key)//'/python_fields', func)
+        call set_particle_vector_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
+             attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), n_oldatts, old_att_names, old_attributes, func, time, dt)
+
+      else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
+        particle => p_list%first
+        do i = 1, dim
+          attribute_array(nscalar+i+((n-1)*dim),:) = particle%attributes(nscalar+i+((n-1)*dim))
+        end do
+      end if
     end do
-    allocate(vconstant(dim))
-    do n = 1,nvector
-       if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/constant')) then
-          call get_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/constant', vconstant)
-          do i = 1, dim
-             attribute_array(nscalar+i+((n-1)*dim),:) = vconstant(i)
+
+    do n = 1, ntensor
+      attr_key = trim_subgroup_path) // 'attributes/tensor_attribute['//int2str(n-1)//']'
+
+      if (have_option(trim(attr_key)//'/constant')) then
+        call get_option(trim(attr_key)//'/constant', tconstant)
+        do i = 1, dim
+          do j = 1, dim
+            attribute_array(nscalar+(nvector*dim)+((i-1)*dim)+j+((n-1)*(dim**2)),:) = tconstant(j,i)
           end do
-       else if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python')) then
-          call get_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python', func)
-          call set_particle_vector_attribute_from_python(attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), positions(:,:), nparticles, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python_fields')) then
-          call get_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python_fields', func)
-          call set_particle_vector_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-               & attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), n_oldatts, old_att_names, old_attributes, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/from_checkpoint_file')) then
-          particle => p_list%first
-          do i = 1, dim
-             attribute_array(nscalar+i+((n-1)*dim),:) = particle%attributes(nscalar+i+((n-1)*dim))
-          end do
-       end if
-    end do
-    allocate(tconstant(dim,dim))
-    do n = 1,ntensor
-       if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/constant')) then
-          call get_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/constant', tconstant)
-          do i = 1,dim
-             do j = 1,dim
-                attribute_array(nscalar+(nvector*dim)+((i-1)*dim)+j+((n-1)*(dim**2)),:) = tconstant(j,i)
-             end do
-          end do
-       else if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python')) then
-          call get_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python', func)
-          call set_particle_tensor_attribute_from_python(attribute_array(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)),:), &
-               positions(:,:), nparticles, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields')) then
-          call get_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields', func)
-          call set_particle_tensor_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
+        end do
+
+       else if (have_option(trim(attr_key)//'/python')) then
+         call get_option(trim(attr_key)//'/python', func)
+         call set_particle_tensor_attribute_from_python( &
+              attribute_array(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)),:), &
+              positions(:,:), nparticles, func, time, dt)
+
+       else if (have_option(trim(attr_key)//'/python_fields')) then
+         call get_option(trim(attr_key)//'/python_fields', func)
+         call set_particle_tensor_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
                & attribute_array(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)),:), &
                n_oldatts, old_att_names, old_attributes, func, time, dt)
-       else if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/from_checkpoint_file')) then
-          particle => p_list%first
-          do i = 1,(dim**2)
-             attribute_array(nscalar+(nvector*dim)+i+((n-1)*(dim**2)),:) = particle%attributes(nscalar+(nvector*dim)+i+((n-1)*(dim**2)))
-          end do
+
+       else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
+         particle => p_list%first
+         do i = 1,(dim**2)
+           attribute_array(nscalar+(nvector*dim)+i+((n-1)*(dim**2)),:) = particle%attributes(nscalar+(nvector*dim)+i+((n-1)*(dim**2)))
+         end do
        end if
-    end do
+     end do
 
     !Set attribute values and old_attribute values
     particle => p_list%first
@@ -999,59 +1014,10 @@ contains
     deallocate(ele)
     deallocate(attribute_array)
     deallocate(old_attributes)
-    deallocate(old_att_names)
+    deallocate(vconstant)
+    deallocate(tconstant)
 
   end subroutine update_particle_subgroup_attributes_and_fields
-
-  subroutine update_particle_attributes_and_fields(state, time)
-    !!Routine to loop over particle arrays and update particle attributes
-    type(state_type), dimension(:), intent(in) :: state
-    real, intent(in) :: time
-    real :: dt
-    type(vector_field), pointer :: xfield
-    type(detector_type), pointer :: particle
-    character(len = OPTION_PATH_LEN) :: group_path, subgroup_path
-
-    integer :: i, k
-    integer :: particle_groups, list_counter
-    integer, dimension(:), allocatable :: particle_arrays
-
-    !Check whether there are any particles.
-
-    particle_groups = option_count("/particles/particle_group")
-    if (particle_groups==0) return
-
-    !Set up particle_lists
-    allocate(particle_arrays(particle_groups))
-    particle_arrays(:) = 0
-    do i = 1,particle_groups
-       particle_arrays(i) = option_count("/particles/particle_group["//int2str(i-1)//"]/particle_subgroup")
-    end do
-
-    ewrite(2,*) "In update_particle_attributes_and_fields"
-
-    !Allocate parameters
-    xfield=>extract_vector_field(state(1), "Coordinate")
-    call get_option("/timestepping/timestep", dt)
-    list_counter = 1
-
-    !Update particle attributes by array
-    do i = 1,particle_groups
-       group_path = "/particles/particle_group["//int2str(i-1)//"]"
-       do k = 1, particle_arrays(i)
-          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-          if (particle_lists(list_counter)%length==0) then
-             list_counter = list_counter + 1
-             cycle
-          end if
-          particle => particle_lists(list_counter)%first
-          if (size(particle%attributes)/=0) then
-             call update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, particle_lists(list_counter))
-          end if
-          list_counter = list_counter + 1
-       end do
-    end do
-  end subroutine update_particle_attributes_and_fields
 
   subroutine update_particle_subgroup_fields(state, ele, lcoords, p_list)
 
