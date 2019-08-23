@@ -59,14 +59,18 @@ module particles
   public :: initialise_particles, move_particles, write_particles_loop, destroy_particles, &
             update_particle_attributes_and_fields, checkpoint_particles_loop
 
-  type(detector_linked_list), allocatable, dimension(:), save :: particle_lists !!Particle lists with dimension equal to the number of particle subgroups
-  type(time_period_type), allocatable, dimension(:), save :: output_CS !! Contain timing info for group output
+  ! One particle list for each subgroup
+  type(detector_linked_list), allocatable, dimension(:), save :: particle_lists
+  ! Timing info for group output
+  type(time_period_type), allocatable, dimension(:), save :: output_CS
 
-
+  !> Derived type to hold the number of scalar, vector and tensor attributes,
+  !! old attributes and old fields for a particle subgroup
   type attr_counts_type
     integer, dimension(3) :: attrs, old_attrs, old_fields
   end type attr_counts_type
 
+  !> Derived type to hold scalar, vector and tensor attributes
   type attr_vals_type
     real, dimension(:), allocatable :: s
     real, dimension(:,:), allocatable :: v
@@ -82,9 +86,15 @@ module particles
   end interface deallocate
 
 contains
+  !> Allocate an attr_vals_type structure, with the given number
+  !! of scalar, vector and tensor attributes, and the geometric dimension
+  !! of the problem.
   subroutine allocate_attr_vals(vals, dim, counts)
+    !> Structure to allocate
     type(attr_vals_type), pointer :: vals
+    !> Geometric dimension
     integer, intent(in) :: dim
+    !> Counts of each rank of attribute
     integer, dimension(3), intent(in) :: counts
 
     allocate(vals)
@@ -93,6 +103,7 @@ contains
     allocate(vals%t(dim, dim, counts(3)))
   end subroutine allocate_attr_vals
 
+  !> Deallocate an attr_vals_type structure
   subroutine deallocate_attr_vals(vals)
     type(attr_vals_type), pointer :: vals
 
@@ -102,13 +113,19 @@ contains
     deallocate(vals)
   end subroutine deallocate_attr_vals
 
+  !> Initialise particles and set up particle file headers (per particle array)
   subroutine initialise_particles(filename, state, global, from_flredecomp, number_of_partitions)
-    !! Initialise particles and set up particle file headers (per particle array)
-    character(len = *), intent(in) :: filename
+    !> Experiment filename to prefix particle output files
+    character(len=*), intent(in) :: filename
+    !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
-    logical, intent(in), optional :: global !! use global/parallel picker queries to determine particle elements
-    logical, intent(in), optional :: from_flredecomp !! change behaviour if we're being called by flredecomp
-    integer, intent(in), optional :: number_of_partitions !! number of processes to use for reading
+    !> Use global/parallel picker queries to determine particle elements?
+    logical, intent(in), optional :: global
+    !> Whether we're being called by flredecomp, this changes behaviour around
+    !! parallel access to particle files
+    logical, intent(in), optional :: from_flredecomp
+    !> Number of processes to use for reading particle data
+    integer, intent(in), optional :: number_of_partitions
 
     character(len=FIELD_NAME_LEN) :: subname
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path
@@ -252,11 +269,11 @@ contains
           call register_detector_list(particle_lists(list_counter))
 
           ! Find number of attributes, old attributes, and names of each
-          call option_names_and_count(trim(subgroup_path) // "/attributes/scalar_attribute", &
+          call attr_names_and_count(trim(subgroup_path) // "/attributes/scalar_attribute", &
                attr_names%s, old_attr_names%s, attr_counts%attrs(1), attr_counts%old_attrs(1))
-          call option_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
+          call attr_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
                attr_names%v, old_attr_names%v, attr_counts%attrs(2), attr_counts%old_attrs(2))
-          call option_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
+          call attr_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
                attr_names%t, old_attr_names%t, attr_counts%attrs(3), attr_counts%old_attrs(3))
 
           ! save names in the detector list -- this will allocate and assign values
@@ -345,9 +362,14 @@ contains
     deallocate(particle_arrays)
   end subroutine initialise_particles
 
-  subroutine option_names_and_count(key, names, old_names, count, old_count)
+  !> Get the names and count of all attributes and old attributes for
+  !! a given attribute rank for a particle subgroup
+  subroutine attr_names_and_count(key, names, old_names, count, old_count)
+    !> Prefix key to an attribute rank within a subgroup
     character(len=*), intent(in) :: key
+    !> Output arrays for attribute names
     character(len=*), dimension(:), allocatable, intent(out) :: names, old_names
+    !> Output attribute counts
     integer, intent(out) :: count, old_count
 
     integer :: i, old_i
@@ -371,9 +393,9 @@ contains
         old_i = old_i + 1
       end if
     end do
-  end subroutine option_names_and_count
+  end subroutine attr_names_and_count
 
-  !! Initialise particles which are defined by a Python function
+  !> Initialise particles which are defined by a Python function
   subroutine read_particles_from_python(n_particles, subgroup_name, subgroup_path, &
        p_list, xfield, dim, &
        current_time, state, &
@@ -429,6 +451,7 @@ contains
     deallocate(coords)
   end subroutine read_particles_from_python
 
+  !> Read attributes for all ranks from an H5Part file
   subroutine read_attrs(h5_id, dim, counts, names, vals)
     !> h5 file to read from
     !! it's assumed this has been set up to read from the right place!
@@ -466,7 +489,7 @@ contains
     end do tensor_attr_loop
   end subroutine read_attrs
 
-  !! Read particles in the given subgroup from a checkpoint file
+  !> Read particles in the given subgroup from a checkpoint file
   subroutine read_particles_from_file(n_particles, subgroup_name, subgroup_path, &
        p_list, xfield, dim, &
        attr_counts, attr_names, old_attr_names, old_field_names, &
@@ -605,7 +628,7 @@ contains
     ! optionally set any file attributes here?
   end subroutine set_particle_output_file
 
-  !! Allocate a single particle, populate and insert it into the given list
+  !> Allocate a single particle, populate and insert it into the given list
   !! In parallel, first check if the particle would be local and only allocate if it is
   subroutine create_single_particle(detector_list, xfield, position, id, name, dim, &
        attr_counts, attr_vals, old_attr_vals, old_field_vals, global)
@@ -684,7 +707,7 @@ contains
     call copy_attrs(detector%old_fields, dim, attr_counts%old_fields, old_field_vals)
   end subroutine create_single_particle
 
-  !! Convert an array of scalar, vector and tensor attribute counts
+  !> Convert an array of scalar, vector and tensor attribute counts
   !! to the total number of attribute slices (i.e. 1 per scalar attribute,
   !! 'dim' per vector, and 'dim*dim' per tensor)
   function total_attributes(counts, dim)
@@ -732,7 +755,7 @@ contains
     end if
   end subroutine copy_attrs
 
-  !! Call move_lagrangian_detectors on all tracked particle groups
+  !> Call move_lagrangian_detectors on all tracked particle groups
   subroutine move_particles(state, dt, timestep)
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: dt
