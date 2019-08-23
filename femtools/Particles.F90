@@ -187,33 +187,41 @@ contains
     v_field = 0
     t_field = 0
     do i = 1, size(state)
-      do j = 1, size(state(i)%scalar_names)
-        sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
-        if (sfield%option_path == "" .or. aliased(sfield)) then
-          cycle
-        else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-          s_field = s_field + 1
-          old_field_names%s(s_field) = state(i)%scalar_names(j)
-        end if
-      end do
-      do j = 1, size(state(i)%vector_names)
-        vfield => extract_vector_field(state(i), state(i)%vector_names(j))
-        if (vfield%option_path == "" .or. aliased(vfield)) then
-          cycle
-        else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-          v_field = v_field + 1
-          old_field_names%v(v_field) = state(i)%vector_names(j)
-        end if
-      end do
-      do j = 1, size(state(i)%tensor_names)
-        tfield => extract_tensor_field(state(i), state(i)%tensor_names(j))
-        if (tfield%option_path == "" .or. aliased(tfield)) then
-          cycle
-        else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
-          t_field = t_field + 1
-          old_field_names%t(t_field) = state(i)%tensor_names(j)
-        end if
-      end do
+      if (field_counts(1) > 0) then
+        do j = 1, size(state(i)%scalar_names)
+          sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
+          if (sfield%option_path == "" .or. aliased(sfield)) then
+            cycle
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+            s_field = s_field + 1
+            old_field_names%s(s_field) = "field_" // state(i)%scalar_names(j)
+          end if
+        end do
+      end if
+
+      if (field_counts(2) > 0) then
+        do j = 1, size(state(i)%vector_names)
+          vfield => extract_vector_field(state(i), state(i)%vector_names(j))
+          if (vfield%option_path == "" .or. aliased(vfield)) then
+            cycle
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+            v_field = v_field + 1
+            old_field_names%v(v_field) = "field_" // state(i)%vector_names(j)
+          end if
+        end do
+      end if
+
+      if (field_counts(3) > 0) then
+        do j = 1, size(state(i)%tensor_names)
+          tfield => extract_tensor_field(state(i), state(i)%tensor_names(j))
+          if (tfield%option_path == "" .or. aliased(tfield)) then
+            cycle
+          else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+            t_field = t_field + 1
+            old_field_names%t(t_field) = "field_" // state(i)%tensor_names(j)
+          end if
+        end do
+      end if
     end do
     assert(s_field + v_field + t_field == n_oldfields)
 
