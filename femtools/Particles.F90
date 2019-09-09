@@ -820,10 +820,12 @@ contains
     real, intent(in) :: dt
     integer, intent(in) :: timestep
 
-    integer :: i
+    integer :: i, particle_groups
 
     ewrite(2,*) "In move_particles"
-    do i = 1, size(particle_lists)
+
+    particle_groups = option_count("/particles/particle_group")
+    do i = 1, particle_groups
       call move_lagrangian_detectors(state, particle_lists(i), dt, timestep, &
            particle_lists(i)%total_attributes)
     end do
