@@ -189,6 +189,7 @@ contains
     ! calculate the number of fields and old fields that would have to be stored
     ! (each combination of field order and field type)
     field_counts(:) = 0
+    old_field_counts(:) = 0
     do i = 1, 3
       do j = 1, 3
         field_counts(i) = field_counts(i) + &
@@ -329,6 +330,10 @@ contains
             ! only copy old field names if they're required
             particle_lists(list_counter)%field_names = field_names
             particle_lists(list_counter)%old_field_names = old_field_names
+
+            ! and the field phases so we can look them up later
+            particle_lists(list_counter)%field_phases = field_phases
+            particle_lists(list_counter)%old_field_phases = old_field_phases
           else
             attr_counts%old_fields(:) = 0
           end if
@@ -514,6 +519,7 @@ contains
     integer(kind=8) :: h5_ierror
     character(len=FIELD_NAME_LEN) :: p
 
+    p = ""
     if (present(prefix)) p = prefix
 
     scalar_attr_loop: do i = 1, counts(1)
@@ -870,6 +876,7 @@ contains
     integer :: i, j, k, n, np
     character(len=FIELD_NAME_LEN) :: p
 
+    p = ""
     if (present(prefix)) p = prefix
 
     np = len_trim(p)
@@ -892,7 +899,7 @@ contains
       end do
 
       ! copy attribute name
-      n = len_trim(attr_names%s(i))
+      n = min(FIELD_NAME_LEN - np - 1, len_trim(attr_names%s(i)))
       do k = 1, n
         name_array(k+np,j) = attr_names%s(i)(k:k)
       end do
@@ -901,26 +908,26 @@ contains
       name_array(np+n+1,j) = C_NULL_CHAR
       j = j + 1
     end do
-    do i = 1, attr_counts(1)
+    do i = 1, attr_counts(2)
       ! copy prefix
       do k = 1, np
         name_array(k,j) = p(k:k)
       end do
 
-      n = len_trim(attr_names%v(i))
+      n = min(FIELD_NAME_LEN - np - 1, len_trim(attr_names%v(i)))
       do k = 1, n
         name_array(k+np,j) = attr_names%v(i)(k:k)
       end do
       name_array(np+n+1,j) = C_NULL_CHAR
       j = j + 1
     end do
-    do i = 1, attr_counts(1)
+    do i = 1, attr_counts(3)
       ! copy prefix
       do k = 1, np
         name_array(k,j) = p(k:k)
       end do
 
-      n = len_trim(attr_names%t(i))
+      n = min(FIELD_NAME_LEN - np - 1, len_trim(attr_names%t(i)))
       do k = 1, n
         name_array(k+np,j) = attr_names%t(i)(k:k)
       end do
@@ -1135,12 +1142,13 @@ contains
         end do
         particle => particle%next
       end do
+
+      deallocate(store_old_attr)
     end if
 
     ! update old field values on the particles
     call update_particle_subgroup_fields(state, ele, lcoords, p_list, old_field_counts)
 
-    deallocate(store_old_attr)
     deallocate(positions)
     deallocate(lcoords)
     deallocate(ele)
