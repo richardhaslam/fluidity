@@ -57,7 +57,8 @@ module detector_tools
             set_particle_vector_attribute_from_python, &
             set_particle_vector_attribute_from_python_fields, &
             set_particle_tensor_attribute_from_python, &
-            set_particle_tensor_attribute_from_python_fields
+            set_particle_tensor_attribute_from_python_fields, &
+            evaluate_particle_fields
 
   interface insert
      module procedure insert_into_detector_list

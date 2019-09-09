@@ -136,7 +136,7 @@ module detector_data_types
      !! Names of attributes and fields stored in a particle subgroup
      type(attr_names_type) :: attr_names, old_attr_names, field_names, old_field_names
      !! The phase of each field that is used in particle attribute calculations
-     type(field_phase_type) :: field_phases
+     type(field_phase_type) :: field_phases, old_field_phases
 
      !! I/O parameters
      logical :: write_nan_outside = .false.
