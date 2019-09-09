@@ -336,6 +336,12 @@ contains
             particle_lists(list_counter)%old_field_phases = old_field_phases
           else
             attr_counts%old_fields(:) = 0
+
+            ! allocate empty arrays for names and phases
+            call allocate(particle_lists(list_counter)%field_names, [0, 0, 0])
+            call allocate(particle_lists(list_counter)%old_field_names, [0, 0, 0])
+            call allocate(particle_lists(list_counter)%field_phases, [0, 0, 0])
+            call allocate(particle_lists(list_counter)%old_field_phases, [0, 0, 0])
           end if
 
           ! assign the total number of list slices for each kind of attribute
