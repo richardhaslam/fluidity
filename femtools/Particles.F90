@@ -139,11 +139,13 @@ contains
     integer, dimension(:), allocatable :: particle_arrays
     integer :: totaldet_global
     logical :: from_file, do_output, store_old_fields
-    integer :: n_oldfields, phase, f
+    integer :: n_fields, n_oldfields, phase, f
     integer :: s_field, v_field, t_field ! field index variables
-    integer, dimension(3) :: field_counts
-    type(attr_names_type) :: attr_names, old_attr_names, old_field_names
+    integer :: s_oldfield, v_oldfield, t_oldfield
+    integer, dimension(3) :: field_counts, old_field_counts
+    type(attr_names_type) :: attr_names, old_attr_names, field_names, old_field_names
     type(attr_counts_type) :: attr_counts
+    type(field_phase_type) :: field_phases
 
     ! field pointers to get their names, for old_field_names
     type(scalar_field), pointer :: sfield
@@ -184,34 +186,50 @@ contains
     call get_option("/geometry/dimension", dim)
     call get_option("/timestepping/current_time", current_time)
 
-    ! calculate the number of old fields that would have to be stored (each combination of field order and field type)
+    ! calculate the number of fields and old fields that would have to be stored
+    ! (each combination of field order and field type)
     field_counts(:) = 0
     do i = 1, 3
       do j = 1, 3
         field_counts(i) = field_counts(i) + &
+             option_count("/material_phase/"//orders(i)//"_field/"//types(j)//"/particles/include_in_particles")
+        old_field_counts(i) = old_field_counts(i) + &
              option_count("/material_phase/"//orders(i)//"_field/"//types(j)//"/particles/include_in_particles/store_old_field")
       end do
     end do
-    n_oldfields = sum(field_counts)
+    n_fields = sum(field_counts)
+    n_oldfields = sum(old_field_counts)
 
     ! allocate arrays to hold field names
-    allocate(old_field_names%s(field_counts(1)))
-    allocate(old_field_names%v(field_counts(2)))
-    allocate(old_field_names%t(field_counts(3)))
+    call allocate(field_names, field_counts)
+    call allocate(old_field_names, old_field_counts)
+    ! allocate arrays to hold field phases
+    call allocate(field_phases, field_counts)
 
     ! read the names of the fields if there are any
+    ! this is both for fields that should be included in particles, and that
+    ! should have their old values available to particles too
     s_field = 0
     v_field = 0
     t_field = 0
+    s_oldfield = 0
+    v_oldfield = 0
+    t_oldfield = 0
     do i = 1, size(state)
       if (field_counts(1) > 0) then
         do j = 1, size(state(i)%scalar_names)
           sfield => extract_scalar_field(state(i), state(i)%scalar_names(j))
           if (sfield%option_path == "" .or. aliased(sfield)) then
             cycle
-          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+          else if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles")) then
             s_field = s_field + 1
-            old_field_names%s(s_field) = "field_" // state(i)%scalar_names(j)
+            field_names%s(s_field) = state(i)%scalar_names(j)
+            field_phases%s(s_field) = i
+
+            if (have_option(trim(complete_field_path(sfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+              s_oldfield = s_oldfield + 1
+              old_field_names%s(s_oldfield) = "Old" // state(i)%scalar_names(j)
+            end if
           end if
         end do
       end if
@@ -221,9 +239,15 @@ contains
           vfield => extract_vector_field(state(i), state(i)%vector_names(j))
           if (vfield%option_path == "" .or. aliased(vfield)) then
             cycle
-          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+          else if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles")) then
             v_field = v_field + 1
-            old_field_names%v(v_field) = "field_" // state(i)%vector_names(j)
+            field_names%v(v_field) = state(i)%vector_names(j)
+            field_phases%v(v_field) = i
+
+            if (have_option(trim(complete_field_path(vfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+              v_oldfield = v_oldfield + 1
+              old_field_names%v(v_oldfield) = "Old" // state(i)%vector_names(j)
+            end if
           end if
         end do
       end if
@@ -233,14 +257,21 @@ contains
           tfield => extract_tensor_field(state(i), state(i)%tensor_names(j))
           if (tfield%option_path == "" .or. aliased(tfield)) then
             cycle
-          else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+          else if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles")) then
             t_field = t_field + 1
-            old_field_names%t(t_field) = "field_" // state(i)%tensor_names(j)
+            field_names%t(t_field) = state(i)%tensor_names(j)
+            field_phases%t(t_field) = i
+
+            if (have_option(trim(complete_field_path(tfield%option_path)) // "/particles/include_in_particles/store_old_field")) then
+              t_oldfield = t_oldfield + 1
+              old_field_names%t(t_oldfield) = "Old" // state(i)%tensor_names(j)
+            end if
           end if
         end do
       end if
     end do
-    assert(s_field + v_field + t_field == n_oldfields)
+    assert(s_field + v_field + t_field == n_fields)
+    assert(s_oldfield + v_oldfield + t_oldfield == n_oldfields)
 
     list_counter = 1
     do i = 1,particle_groups
@@ -290,8 +321,9 @@ contains
           end if
 
           if (store_old_fields) then
-            attr_counts%old_fields(:) = field_counts(:)
+            attr_counts%old_fields(:) = old_field_counts(:)
             ! only copy old field names if they're required
+            particle_lists(list_counter)%field_names = field_names
             particle_lists(list_counter)%old_field_names = old_field_names
           else
             attr_counts%old_fields(:) = 0
@@ -339,6 +371,11 @@ contains
 
           ! Get options for lagrangian particle movement
           call read_detector_move_options(particle_lists(list_counter), "/particles")
+
+          ! Make sure to deallocate attribute names before moving on
+          call deallocate(attr_names)
+          call deallocate(old_attr_names)
+
           list_counter = list_counter + 1
        end do
     end do
@@ -360,6 +397,8 @@ contains
     end do
 
     deallocate(particle_arrays)
+    call deallocate(field_names)
+    call deallocate(old_field_names)
   end subroutine initialise_particles
 
   !> Get the names and count of all attributes and old attributes for
@@ -389,7 +428,7 @@ contains
 
       if (have_option(trim(subkey)//"/python_fields/store_old_attribute")) then
         ! prefix with "old_" to distinguish from current attribute
-        old_names(old_i) = "old_"//trim(names(i))
+        old_names(old_i) = "Old" // trim(names(i))
         old_i = old_i + 1
       end if
     end do
@@ -770,55 +809,87 @@ contains
     end do
   end subroutine move_particles
 
+  !> Update attributes and fields for every subgroup of every particle group
   subroutine update_particle_attributes_and_fields(state, time)
-    !!Routine to loop over particle arrays and update particle attributes
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: time
     real :: dt
-    type(vector_field), pointer :: xfield
-    type(detector_type), pointer :: particle
     character(len = OPTION_PATH_LEN) :: group_path, subgroup_path
 
     integer :: i, k
-    integer :: particle_groups, list_counter
-    integer, dimension(:), allocatable :: particle_arrays
+    integer :: particle_groups, particle_subgroups, list_counter
 
-    !Check whether there are any particles.
-
+    ! Check whether there are any particles.
     particle_groups = option_count("/particles/particle_group")
-    if (particle_groups==0) return
-
-    !Set up particle_lists
-    allocate(particle_arrays(particle_groups))
-    particle_arrays(:) = 0
-    do i = 1,particle_groups
-       particle_arrays(i) = option_count("/particles/particle_group["//int2str(i-1)//"]/particle_subgroup")
-    end do
+    if (particle_groups == 0) return
 
     ewrite(2,*) "In update_particle_attributes_and_fields"
 
-    !Allocate parameters
-    xfield=>extract_vector_field(state(1), "Coordinate")
     call get_option("/timestepping/timestep", dt)
     list_counter = 1
 
-    !Update particle attributes by array
-    do i = 1,particle_groups
+    do i = 1, particle_groups
        group_path = "/particles/particle_group["//int2str(i-1)//"]"
-       do k = 1, particle_arrays(i)
-          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
-          if (particle_lists(list_counter)%length==0) then
-             list_counter = list_counter + 1
-             cycle
-          end if
-          particle => particle_lists(list_counter)%first
-          if (size(particle%attributes)/=0) then
-             call update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, particle_lists(list_counter))
-          end if
-          list_counter = list_counter + 1
+       particle_subgroups = option_count(trim(group_path) // "/particle_subgroup")
+       do k = 1, particle_subgroups
+         subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
+
+         if (particle_lists(list_counter)%length==0) then
+           list_counter = list_counter + 1
+           cycle
+         end if
+
+         call update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, particle_lists(list_counter))
+         list_counter = list_counter + 1
        end do
     end do
   end subroutine update_particle_attributes_and_fields
+
+  !> Copy a structure of attribute names by rank
+  !! to a 2D character array for passing to C
+  subroutine copy_names_to_array(attr_names, name_array, attr_counts)
+    type(attr_names_type), intent(in) :: attr_names
+    character, allocatable, dimension(:,:), intent(out) :: name_array
+    integer, dimension(3), intent(out) :: attr_counts
+
+    integer :: i, j, k, n
+
+    ! determine number of names for each rank
+    ! so that we can allocate the names array
+    attr_counts(1) = size(attr_names%s)
+    attr_counts(2) = size(attr_names%v)
+    attr_counts(3) = size(attr_names%t)
+    allocate(name_array(FIELD_NAME_LEN, sum(attr_counts)))
+
+    ! unfortunately, we have to use a character array for C
+    ! interoperability, and we can't assign an array from
+    ! a character scalar, so we have to do explicit lops
+    j = 1
+    do i = 1, attr_counts(1)
+      n = len_trim(attr_names%s(i))
+      do k = 1, n
+        name_array(k,j) = attr_names%s(i)(k:k)
+      end do
+      name_array(n+1,j) = C_NULL_CHAR
+      j = j + 1
+    end do
+    do i = 1, attr_counts(1)
+      n = len_trim(attr_names%v(i))
+      do k = 1, n
+        name_array(k,j) = attr_names%v(i)(k:k)
+      end do
+      name_array(n+1,j) = C_NULL_CHAR
+      j = j + 1
+    end do
+    do i = 1, attr_counts(1)
+      n = len_trim(attr_names%t(i))
+      do k = 1, n
+        name_array(k,j) = attr_names%t(i)(k:k)
+      end do
+      name_array(n+1,j) = C_NULL_CHAR
+      j = j + 1
+    end do
+  end subroutine copy_names_to_array
 
   !> Set particle attributes for a single subgroup
   subroutine update_particle_subgroup_attributes_and_fields(state, time, dt, subgroup_path, p_list)
@@ -837,21 +908,40 @@ contains
     type(detector_type), pointer :: particle
     character(len=OPTION_PATH_LEN) :: attr_key
 
+    ! arrays into which all particle data for the
+    ! subgroup is copied
     real, allocatable, dimension(:,:) :: positions
     real, allocatable, dimension(:,:) :: attribute_array
     real, allocatable, dimension(:,:) :: old_attributes
     real, allocatable, dimension(:,:) :: lcoords
     integer, allocatable, dimension(:) :: ele
 
+    logical, allocatable, dimension(:) :: store_old_attr
+
+    character, allocatable, dimension(:,:) :: old_attr_names, field_names, old_field_names
+
     real :: constant
     real, allocatable, dimension(:) :: vconstant
     real, allocatable, dimension(:,:) :: tconstant
-    integer :: i, j, nparticles, l, m, n, dim
+    integer :: i, j, nparticles, l, m, n, dim, attr_idx
+    integer :: nscalar, nvector, ntensor
+    integer, dimension(3) :: old_attr_counts, field_counts, old_field_counts
 
     nparticles = p_list%length
     if (nparticles == 0) then
        return
     end if
+
+    ! get attribute sizes from the detector list
+    nscalar = size(p_list%attr_names%s)
+    nvector = size(p_list%attr_names%v)
+    ntensor = size(p_list%attr_names%t)
+
+    ! store all the old attribute names in a contiguous list
+    ! for passing through to python functions
+    call copy_names_to_array(p_list%old_attr_names, old_attr_names, old_attr_counts)
+    call copy_names_to_array(p_list%field_names, field_names, field_counts)
+    call copy_names_to_array(p_list%old_field_names, old_field_names, old_field_counts)
 
     call get_option("/geometry/dimension", dim)
     allocate(vconstant(dim))
@@ -870,9 +960,13 @@ contains
        positions(:,i) = particle%position
        lcoords(:,i) = particle%local_coords
        ele(i) = particle%element
+       ! copy current attributes in case we loaded from file
+       attribute_array(:,i) = particle%attributes
        old_attributes(:,i) = particle%old_attributes
        particle => particle%next
     end do
+
+    attr_idx = 1
 
     ! calculate new values for all attributes
     do n = 1, nscalar
@@ -880,22 +974,25 @@ contains
 
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', constant)
-        attribute_array(n,:) = constant
+        attribute_array(attr_idx,:) = constant
 
       else if (have_option(trim(attr_key)//'/python')) then
         call get_option(trim(attr_key)//'/python', func)
-        call set_particle_scalar_attribute_from_python(attribute_array(n,:), positions(:,:), nparticles, func, time, dt)
+        call set_particle_scalar_attribute_from_python(attribute_array(attr_idx,:), positions(:,:), nparticles, func, time, dt)
 
       else if (have_option(trim(attr_key)//'/python_fields')) then
         call get_option(trim(attr_key)//'/python_fields', func)
-        ! TODO
         call set_particle_scalar_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-             attribute_array(n,:), n_oldatts, old_att_names, old_attributes, func, time, dt)
+             attribute_array(attr_idx,:), &
+             old_attr_names, old_attr_counts, old_attributes, &
+             field_names, field_counts, old_field_names, old_field_counts, &
+             func, time, dt)
 
       else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
-        particle => p_list%first
-        attribute_array(n,:) = particle%attributes(n)
+        ! don't do anything, the attribute was already loaded from file
       end if
+
+      attr_idx = attr_idx + 1
     end do
 
     do n = 1, nvector
@@ -903,120 +1000,117 @@ contains
 
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', vconstant)
-        do i = 1, dim
-          attribute_array(nscalar+i+((n-1)*dim),:) = vconstant(i)
-        end do
+        ! broadcast vector constant out to all particles
+        attribute_array(attr_idx:attr_idx+dim-1,:) = spread(vconstant, 2, nparticles)
 
       else if (have_option(trim(attr_key)//'/python')) then
         call get_option(trim(attr_key)//'/python', func)
         call set_particle_vector_attribute_from_python( &
-             attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), &
+             attribute_array(attr_idx:attr_idx+dim-1,:), &
              positions(:,:), nparticles, func, time, dt)
 
       else if (have_option(trim(attr_key)//'/python_fields')) then
         call get_option(trim(attr_key)//'/python_fields', func)
         call set_particle_vector_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-             attribute_array(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim),:), n_oldatts, old_att_names, old_attributes, func, time, dt)
+             attribute_array(attr_idx:attr_idx+dim-1,:), &
+             old_attr_names, old_attr_counts, old_attributes, &
+             field_names, field_counts, old_field_names, old_field_counts, &
+             func, time, dt)
 
       else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
-        particle => p_list%first
-        do i = 1, dim
-          attribute_array(nscalar+i+((n-1)*dim),:) = particle%attributes(nscalar+i+((n-1)*dim))
-        end do
+        ! don't do anything, the attribute was already loaded from file
       end if
+
+      attr_idx = attr_idx + dim
     end do
 
     do n = 1, ntensor
-      attr_key = trim_subgroup_path) // 'attributes/tensor_attribute['//int2str(n-1)//']'
+      attr_key = trim(subgroup_path) // 'attributes/tensor_attribute['//int2str(n-1)//']'
 
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', tconstant)
-        do i = 1, dim
-          do j = 1, dim
-            attribute_array(nscalar+(nvector*dim)+((i-1)*dim)+j+((n-1)*(dim**2)),:) = tconstant(j,i)
-          end do
-        end do
+        ! flatten tensor, then broadcast out to all particles
+        attribute_array(attr_idx:attr_idx+dim**2-1,:) = spread(reshape(tconstant, [dim**2]), 2, nparticles)
 
        else if (have_option(trim(attr_key)//'/python')) then
          call get_option(trim(attr_key)//'/python', func)
          call set_particle_tensor_attribute_from_python( &
-              attribute_array(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)),:), &
+              attribute_array(attr_idx:attr_idx + dim**2 - 1,:), &
               positions(:,:), nparticles, func, time, dt)
 
        else if (have_option(trim(attr_key)//'/python_fields')) then
          call get_option(trim(attr_key)//'/python_fields', func)
          call set_particle_tensor_attribute_from_python_fields(p_list, state, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-               & attribute_array(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)),:), &
-               n_oldatts, old_att_names, old_attributes, func, time, dt)
+               attribute_array(attr_idx:attr_idx + dim**2 - 1,:), &
+               old_attr_names, old_attr_counts, old_attributes, &
+               field_names, field_counts, old_field_names, old_field_counts, &
+               func, time, dt)
 
        else if (have_option(trim(attr_key)//'/from_checkpoint_file')) then
-         particle => p_list%first
-         do i = 1,(dim**2)
-           attribute_array(nscalar+(nvector*dim)+i+((n-1)*(dim**2)),:) = particle%attributes(nscalar+(nvector*dim)+i+((n-1)*(dim**2)))
-         end do
+        ! don't do anything, the attribute was already loaded from file
        end if
+
+       attr_idx = attr_idx + dim**2
      end do
 
-    !Set attribute values and old_attribute values
+    ! Set attribute values and old_attribute values
     particle => p_list%first
-    if (size(particle%old_attributes)==0) then
-       do j = 1,nparticles
-          particle%attributes = attribute_array(:,j)
-          particle => particle%next
-       end do
+    if (size(particle%old_attributes) == 0) then
+      ! no old attributes to store; only store current attributes
+      do j = 1, nparticles
+        particle%attributes = attribute_array(:,j)
+        particle => particle%next
+      end do
     else
-       allocate(store_old_att(size(particle%attributes)))
-       !copy old scalar attributes
-       do n = 1,nscalar
-          if (have_option(trim(subgroup_path) // '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-             store_old_att(n)=1
-          else
-             store_old_att(n)=0
-          end if
-       end do
-       !copy old vector attributes
-       do n = 1,nvector
-          if (have_option(trim(subgroup_path) // '/attributes/vector_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-             store_old_att(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim))=1
-          else
-             store_old_att(nscalar+1+((n-1)*dim):nscalar+dim+((n-1)*dim))=0
-          end if
-       end do
-       !copy old tensor attributes
-       do n = 1,ntensor
-          if (have_option(trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')) then
-             store_old_att(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)))=1
-          else
-             store_old_att(nscalar+(nvector*dim)+1+((n-1)*(dim**2)):nscalar+(nvector*dim)+(dim**2)+((n-1)*(dim**2)))=0
-          end if
-       end do
+      ! else, we have to figure out which attributes
+      ! need to be stored as old attributes too
+      allocate(store_old_attr(size(particle%attributes)))
+      attr_idx = 1
+      do n = 1, nscalar
+        store_old_attr(attr_idx) = have_option(trim(subgroup_path) // &
+             '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
+        attr_idx = attr_idx + 1
+      end do
 
-       do j = 1,nparticles
-          particle%attributes = attribute_array(:,j)
-          m=1
-          do n = 1,size(particle%attributes)
-             if (store_old_att(n)==1) then
-                particle%old_attributes(m) = particle%attributes(n)
-                m=m+1
-             end if
-          end do
-          particle => particle%next
-       end do
+      do n = 1, nvector
+        store_old_attr(attr_idx:attr_idx+dim-1) = have_option(trim(subgroup_path) // &
+             '/attributes/vector_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
+        attr_idx = attr_idx + dim
+      end do
+
+      do n = 1, ntensor
+        store_old_attr(attr_idx:attr_idx + dim**2 - 1) = have_option(trim(subgroup_path) // &
+             '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
+      end do
+
+      do j = 1, nparticles
+        ! store current attributes as usual
+        particle%attributes = attribute_array(:,j)
+
+        ! store the old attributes which are required
+        m = 1
+        do n = 1, size(particle%attributes)
+          if (store_old_attr(n)) then
+            particle%old_attributes(m) = particle%attributes(n)
+            m = m + 1
+          end if
+        end do
+        particle => particle%next
+      end do
     end if
 
-    particle => p_list%first
-    if (size(particle%old_fields)/=0) then
-       call update_particle_subgroup_fields(state, ele, lcoords, p_list)
-    end if
+    ! update old field values on the particles
+    call update_particle_subgroup_fields(state, ele, lcoords, p_list)
 
+    deallocate(store_old_attr)
     deallocate(positions)
     deallocate(lcoords)
     deallocate(ele)
     deallocate(attribute_array)
     deallocate(old_attributes)
+    deallocate(old_attr_names)
     deallocate(vconstant)
     deallocate(tconstant)
-
   end subroutine update_particle_subgroup_attributes_and_fields
 
   subroutine update_particle_subgroup_fields(state, ele, lcoords, p_list)

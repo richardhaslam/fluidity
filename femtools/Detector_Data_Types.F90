@@ -37,8 +37,8 @@ module detector_data_types
   private
   
   public :: detector_type, rk_gs_parameters, detector_linked_list, &
-            detector_list_ptr, stringlist, attr_names_type, &
-            STATIC_DETECTOR, LAGRANGIAN_DETECTOR
+            detector_list_ptr, stringlist, attr_names_type, field_phase_type, &
+            STATIC_DETECTOR, LAGRANGIAN_DETECTOR, allocate, deallocate
 
   integer, parameter :: STATIC_DETECTOR=1, LAGRANGIAN_DETECTOR=2
 
@@ -50,6 +50,18 @@ module detector_data_types
   type attr_names_type
     character(len=FIELD_NAME_LEN), dimension(:), allocatable :: s, v, t
   end type attr_names_type
+
+  type field_phase_type
+    integer, dimension(:), allocatable :: s, v, t
+  end type field_phase_type
+
+  interface allocate
+    module procedure allocate_attr_names, allocate_field_phases
+  end interface allocate
+
+  interface deallocate
+    module procedure deallocate_attr_names
+  end interface deallocate
 
   !! Type for caching detector position and search information.
   type detector_type
@@ -122,7 +134,9 @@ module detector_data_types
      !! Total number of arrays stored for attributes and fields on a particle subgroup
      integer, dimension(3) :: total_attributes
      !! Names of attributes and fields stored in a particle subgroup
-     type(attr_names_type) :: attr_names, old_attr_names, old_field_names
+     type(attr_names_type) :: attr_names, old_attr_names, field_names, old_field_names
+     !! The phase of each field that is used in particle attribute calculations
+     type(field_phase_type) :: field_phases
 
      !! I/O parameters
      logical :: write_nan_outside = .false.
@@ -133,5 +147,33 @@ module detector_data_types
   type detector_list_ptr
      type(detector_linked_list), pointer :: ptr
   end type detector_list_ptr
+
+contains
+
+  subroutine allocate_attr_names(attr_names, counts)
+    type(attr_names_type), intent(out) :: attr_names
+    integer, dimension(3), intent(in) :: counts
+
+    allocate(attr_names%s(counts(1)))
+    allocate(attr_names%v(counts(2)))
+    allocate(attr_names%t(counts(3)))
+  end subroutine allocate_attr_names
+
+  subroutine allocate_field_phases(field_phases, counts)
+    type(field_phase_type), intent(out) :: field_phases
+    integer, dimension(3), intent(in) :: counts
+
+    allocate(field_phases%s(counts(1)))
+    allocate(field_phases%v(counts(2)))
+    allocate(field_phases%t(counts(3)))
+  end subroutine allocate_field_phases
+
+  subroutine deallocate_attr_names(attr_names)
+    type(attr_names_type), intent(inout) :: attr_names
+
+    deallocate(attr_names%s)
+    deallocate(attr_names%v)
+    deallocate(attr_names%t)
+  end subroutine deallocate_attr_names
 
 end module detector_data_types
