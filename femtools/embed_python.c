@@ -279,11 +279,12 @@ int set_tensor_result_double(int i, int *dim, void **result, PyObject *pResult)
 
   for (int ii = 0; ii < dim[0]; ii++) {
     for (int jj = 0; jj < dim[1]; jj++) {
-      *((double**)result)[i*(dim[0]+dim[1]) + jj*dim[0] + ii] = *((double*)PyArray_GETPTR2(pArray, ii, jj));
+      (*(double**)result)[i*(dim[0]+dim[1]) + jj*dim[0] + ii] = *((double*)PyArray_GETPTR2(pArray, ii, jj));
     }
   }
   Py_DECREF(pArray);
 
+  return 0;
 }
 
 #define set_tensor_field_from_python F77_FUNC(set_tensor_field_from_python, SET_TENSOR_FIELD_FROM_PYTHON)
