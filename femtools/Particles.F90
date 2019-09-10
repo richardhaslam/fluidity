@@ -1316,7 +1316,7 @@ contains
   end subroutine write_particles_subgroup
 
   !> Write attributes with given names to an H5Part file
-  subroutine write_attrs(h5_id, dim, names, vals)
+  subroutine write_attrs(h5_id, dim, names, vals, prefix)
     !> h5 file to write to
     integer(kind=8), intent(in) :: h5_id
     !> spatial dimension
@@ -1325,22 +1325,28 @@ contains
     type(attr_names_type), intent(in) :: names
     !> attribute values, ordered by position/rank as they are on particles
     real, dimension(:,:), intent(in) :: vals
+    !> Optional prefix to attribute names
+    character(len=*), intent(in), optional :: prefix
 
     integer :: i, j, k, att
     integer(kind=8) :: h5_ierror
+    character(len=FIELD_NAME_LEN) :: p
+
+    p = ""
+    if (present(prefix)) p = prefix
 
     ! write out attributes -- scalar, vector, tensor
     att = 1
     scalar_attr_loop: do i = 1, size(names%s)
       h5_ierror = h5pt_writedata_r8(h5_id, &
-           trim(names%s(i)), vals(:,att))
+           trim(p)//names%s(i), vals(:,att))
       att = att + 1
     end do scalar_attr_loop
 
     vector_attr_loop: do i = 1, size(names%v)
       do j = 1, dim
         h5_ierror = h5pt_writedata_r8(h5_id, &
-             trim(names%v(i))//"_"//int2str(j), vals(:,att))
+             trim(p)//names%v(i)//"_"//int2str(j), vals(:,att))
         att = att + 1
       end do
     end do vector_attr_loop
@@ -1349,7 +1355,7 @@ contains
       do j = 1, dim
         do k = 1, dim
           h5_ierror = h5pt_writedata_r8(h5_id, &
-               trim(names%t(i))//"_"//int2str(j)//int2str(k), vals(:,att))
+               trim(p)//names%t(i)//"_"//int2str(j)//int2str(k), vals(:,att))
           att = att + 1
         end do
       end do
@@ -1529,7 +1535,7 @@ contains
 
     call write_attrs(h5_id, dim, particle_list%attr_names, attr_data)
     call write_attrs(h5_id, dim, particle_list%old_attr_names, old_attr_data)
-    call write_attrs(h5_id, dim, particle_list%old_field_names, old_field_data)
+    call write_attrs(h5_id, dim, particle_list%old_field_names, old_field_data, prefix="Old")
 
     ! update schema file to read this subgroup from the checkpoint file
     call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, &
