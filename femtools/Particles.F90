@@ -831,7 +831,9 @@ contains
     ewrite(2,*) "In move_particles"
 
     particle_groups = option_count("/particles/particle_group")
-    do i = 1, particle_groups
+    if (particle_groups == 0) return
+
+    do i = 1, size(particle_lists)
       call move_lagrangian_detectors(state, particle_lists(i), dt, timestep, &
            particle_lists(i)%total_attributes)
     end do
