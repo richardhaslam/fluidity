@@ -1830,9 +1830,7 @@ Name			& Statistic		& Material phase name	& Diamond information			& Notes \\
 %-----------------------------------------------------------------------------------------------------------------------------------%
 \hline \multicolumn{5}{|p{1.25\textwidth}|}{{\bf File format information}} \\ \hline
 %-----------------------------------------------------------------------------------------------------------------------------------%
-format			& binary or plain\_text	&			& always included			& the .stat file will be in plain text unless \option{/io/detectors/binary\_output} is switched on  \\
-real\_size		& real\_size		&			& \option{/io/detectors/binary\_output}	& size of real \\
-integer\_size		& integer\_size		&			& \option{/io/detectors/binary\_output}	& size of an integer \\
+format			& binary or plain\_text	&			& always included			& the .stat file will be in binary format unless \option{/io/detectors/ascii\_output} is switched on.  \\
 \hline \multicolumn{5}{|p{1.5\textwidth}|}{{\bf Mesh diagnostics} e.g. \option{/geometry/mesh::CoordinateMesh/from\_file}} \\ \hline
 CoordinateMesh		& nodes			& 			& \option{\ldots/stat/include\_in\_stat}	& number of nodes in the mesh \\
 CoordinateMesh		& elements		&			& \option{\ldots/stat/include\_in\_stat}	& number of elements in the mesh \\
@@ -1957,82 +1955,84 @@ The mixing stats can be calculated using the control-volume mesh or for \Poo usi
 
 The volume fractions can be normalised by the total volume of the domain by activating the element \option{\ldots/stat/include\_mixing\_stats[0]/control\_volumes/normalise}. The `tolerance' beneath the bin bounds for which the scalar field should be included can be specified by activating the element \option{\ldots/stat/include\_mixing\_stats[0]/control\_volumes/tolerance} (i.e. $1.0-\mathrm{tolerance} \leq c < 2.0-\mathrm{tolerance}$). If not selected it defaults to machine tolerance epsilon(0.0). For an example of using the mixing stats see the test case in the \fluidity\ trunk \lstinline[language = bash]+.../tests/lock_exchange_2d_cg+ or \lstinline[language = bash]+.../tests/cv_mixing_bin_test_serial/+.
 
-\subsection{Detectors}
+\subsection{Detectors and Particles}
 \label{sec:diagnostics_detectors}
-The detectors file contains information about the positions of the detectors which is the same for all time steps in the case of static detectors and change at each time step for the Lagrangian detectors as they are advected by the flow. It also contains information about the values of different flow variables at the positions of the detectors. Both, position and variables information are collected at run time.
+The detectors file (in H5 format) contains information about the positions of the detectors and any information about the values of different flow variables at the positions of the detectors.
+Both position and variable information are collected at run time. The user selects which field variables should be included in the detectors file by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different detectors positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/detectors} \option{/include\_in\_detectors} should be set. Only the fields of interest should be included since extra information will make the detectors file very large and more difficult to handle.
 
-The user selects which field variables should be included in the detectors file by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different detectors positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/detectors} \option{/include\_in\_detectors} should be set. Only the fields of interest should be included since extra information will make the detectors file very large and more difficult to handle. If many detectors are present and/or information from many flow variables is required, it is recommended to set the \option{/io/detectors/binary\_output} in Diamond, since an ascii file will quickly become very large.
+Particle output files (also in H5 format) contain the position of particles over time (as they are adveceted by the flow), in addition to an attribute information that is stored on these particles The user selects which field variables should be accesible to the particles by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different particles positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/particles} \option{/include\_in\_particles} should be set. This field information is subsequently interpolated onto the particles and can be used to update specific attributes, as required.
 
-The information of the detectors can be extracted with stat\_parser and it can be visualised with statplot. 
-
-The position of the detectors and value of the selected variables at those positions is saved into the output file at every time step, starting from the end of the first time step and it is done before the mesh is adapted. 
+The information on detectors and particles can be visualised with Paraview. 
 
 \subsubsection{File format}
 \label{sec:detectors_output}
-Similarly to the .stat file, the detectors file formats are ascii or plain text format and binary format.
 
-In plain text format, the .detectors file contains first an XML header followed by a section with the data. The header is contained within \lstinline[language = XML]*<header>* $\ldots$
-\lstinline[language = XML]*</header>* tags and describes the content of each column in the data section. An example of the header is presented in \ref{header_det}.
+ANGUS - Fix me... old text below - needs updating. Please write a little about the format for particle and detector files and how to access the data through h5py. Perhaps provide some examples as was done previously?
 
-\begin{example}
-\begin{lstlisting}[language = XML]
-<header>
-<field column="1" name="ElapsedTime" statistic="value"/>
-<field column="2" name="dt" statistic="value"/>
-<field column="3" name="LAGRANGIAN_DET_000001" statistic="position" 
-     components="3"/>
-<field column="6" name="LAGRANGIAN_DET_000002" statistic="position" 
-     components="3"/>
-<field column="9" name="LAGRANGIAN_DET_000003" statistic="position" 
-     components="3"/>
-...
-<field column="819348" name="Temperature" 
-    statistic="LAGRANGIAN_DET_000001" material_phase="BoussinesqFluid"/>
-<field column="819349" name="Temperature" 
-    statistic="LAGRANGIAN_DET_000002" material_phase="BoussinesqFluid"/>
-<field column="819350" name="Temperature" 
-    statistic="LAGRANGIAN_DET_000003" material_phase="BoussinesqFluid"/>
-...
-<field column="983217" name="Velocity" statistic="LAGRANGIAN_DET_000001" 
-    material_phase="BoussinesqFluid" components="3"/>
-<field column="983220" name="Velocity" statistic="LAGRANGIAN_DET_000002" 
-    material_phase="BoussinesqFluid" components="3"/>
-<field column="983223" name="Velocity" statistic="LAGRANGIAN_DET_000003" 
-    material_phase="BoussinesqFluid" components="3"/>
-\end{lstlisting}
+%Similarly to the .stat file, the detectors file formats are ascii or plain text format and binary format.
 
-\caption{An example of the header in .detectors file}
-\label{header_det}
-\end{example}
+%In plain text format, the .detectors file contains first an XML header followed by a section with the data. The header is contained within \lstinline[language = XML]*<header>* $\ldots$
+%\lstinline[language = XML]*</header>* tags and describes the content of each column in the data section. An example of the header is presented in \ref{header_det}.
 
-when having the \option{/io/detectors/binary\_output} option set in Diamond, the header is stored in a plain text file with the .detectors extension and the data is stored in binary in another file with .detectors.dat extension.
+%\begin{example}
+%\begin{lstlisting}[language = XML]
+%<header>
+%<field column="1" name="ElapsedTime" statistic="value"/>
+%<field column="2" name="dt" statistic="value"/>
+%<field column="3" name="LAGRANGIAN_DET_000001" statistic="position" 
+%     components="3"/>
+%<field column="6" name="LAGRANGIAN_DET_000002" statistic="position" 
+%     components="3"/>
+%<field column="9" name="LAGRANGIAN_DET_000003" statistic="position" 
+%     components="3"/>
+%...
+%<field column="819348" name="Temperature" 
+%    statistic="LAGRANGIAN_DET_000001" material_phase="BoussinesqFluid"/>
+%<field column="819349" name="Temperature" 
+%    statistic="LAGRANGIAN_DET_000002" material_phase="BoussinesqFluid"/>
+%<field column="819350" name="Temperature" 
+%    statistic="LAGRANGIAN_DET_000003" material_phase="BoussinesqFluid"/>
+%...
+%<field column="983217" name="Velocity" statistic="LAGRANGIAN_DET_000001" 
+%    material_phase="BoussinesqFluid" components="3"/>
+%<field column="983220" name="Velocity" statistic="LAGRANGIAN_DET_000002" 
+%    material_phase="BoussinesqFluid" components="3"/>
+%<field column="983223" name="Velocity" statistic="LAGRANGIAN_DET_000003" 
+%    material_phase="BoussinesqFluid" components="3"/>
+%\end{lstlisting}
 
-In order to read the .detectors files in python, the \lstinline[language = Python]*fluidity_tools* python module described in \ref{sec:diagnostics_stat_parser} should be used.
+%\caption{An example of the header in .detectors file}
+%\label{header_det}
+%\end{example}
 
-\begin{lstlisting}[language = Python]
-import fluidity_tools
-detectors = fluidity_tools.stat_parser(filename)
-\end{lstlisting}
+%when having the \option{/io/detectors/binary\_output} option set in Diamond, the header is stored in a plain text file with the .detectors extension and the data is stored in binary in another file with .detectors.dat extension.
 
-As indicated earlier, this python module reads both
-plain text and binary file formats. For .detectors files using the binary
-format, \lstinline[language = Python]*filename* should also correspond to the XML header file.
+%In order to read the .detectors files in python, the \lstinline[language = Python]*fluidity_tools* python module described in \ref{sec:diagnostics_stat_parser} should be used.
 
-It is possible to find out which fields are contained in a state Water with:
+%\begin{lstlisting}[language = Python]
+%import fluidity_tools
+%detectors = fluidity_tools.stat_parser(filename)
+%\end{lstlisting}
 
-\begin{lstlisting}[language=Python]
-stat["Water"].keys()
-\end{lstlisting}
+%As indicated earlier, this python module reads both
+%plain text and binary file formats. For .detectors files using the binary
+%format, \lstinline[language = Python]*filename* should also correspond to the XML header file.
 
-The Temperature versus time for a particular detector can be plotted with the following python lines:
+%It is possible to find out which fields are contained in a state Water with:
 
-\begin{lstlisting}[language=Python]
-from matplotlib import pylab
-time = detectors["ElapsedTime"]["value"]
-Temp = detectors["Water"]["Temperature"]["LAGRANGIAN_DET_000001"]
-pylab.plot(time, Temp)
-pylab.xlabel("Time")
-pylab.ylabel("Temperature")
-pylab.show()
-\end{lstlisting}
+%\begin{lstlisting}[language=Python]
+%stat["Water"].keys()
+%\end{lstlisting}
+
+%The Temperature versus time for a particular detector can be plotted with the following python lines:
+
+%\begin{lstlisting}[language=Python]
+%from matplotlib import pylab
+%time = detectors["ElapsedTime"]["value"]
+%Temp = detectors["Water"]["Temperature"]["LAGRANGIAN_DET_000001"]
+%pylab.plot(time, Temp)
+%pylab.xlabel("Time")
+%pylab.ylabel("Temperature")
+%pylab.show()
+%\end{lstlisting}
 
