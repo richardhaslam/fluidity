@@ -133,7 +133,7 @@ lib/libadaptivity.a:
 	@BUILD_LIBADAPT@
 lib/libH5hut.so:
 	@echo '    MKDIR lib'; mkdir -p lib
-	echo '    MAKE h5hut'; $(MAKE) -C h5hut install-exec
+	echo '    MAKE h5hut'; $(MAKE) -C h5hut install-exec install-data
 lib/libvtkfortran.a:
 	@echo '    MKDIR lib'; mkdir -p lib
 	echo '    MAKE libvtkfortran'; $(MAKE) -C libvtkfortran 2>make.log 2>&1 && cp libvtkfortran/libvtkfortran.a lib/ && cp libvtkfortran/*.mod include/
