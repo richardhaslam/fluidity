@@ -1140,7 +1140,7 @@ contains
        if (particles_c) then
           call delete_option(trim(subgroup_path_name) // trim(temp_string) // "/attributes/attribute["//int2str(j-1)//"]/constant")
           call set_option_attribute(trim(subgroup_path_name) // trim(temp_string) // "/attributes/attribute["//int2str(j-1)// &
-               "]/from_checkpoint_file/file_name", trim(filename) // "." // trim(temp_string), stat)
+               "]/from_checkpoint_file/file_name", trim(filename), stat)
           if(stat /= SPUD_NO_ERROR .and. stat /= SPUD_NEW_KEY_WARNING .and. stat /= SPUD_ATTR_SET_FAILED_WARNING) then
              FLAbort("Failed to set scalar field particles filename when checkpointing")
           end if
