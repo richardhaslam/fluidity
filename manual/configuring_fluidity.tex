@@ -270,42 +270,35 @@ Up to five sets of files are created when checkpointing:
 \item Checkpointed option file - A new FLML file, with the from\_file mesh
   set to read the checkpoint mesh files and the prognostic fields set
   to initialise from the checkpoint field files.
-\item Particle and Detector files - files related to checkpointing of
-  particles and detectors are created.
+\item Particle files - files related to checkpointing of
+  particles are created.
 \end{enumerate}
 
-ANGUS - Fixme - write a little about checkpointing for particles and (static) detectors please. I've commented out the old text, but it's below for your reference.
+Particles are checkpointed with a single file for each subgroup. The
+checkpoint files use the same H5Part format used for regular particle
+dumps, with some additions to ensure that the particles' state can be
+completely reconstructed in a restart. The number of particles written
+by each processor is stored in a global attribute. Additionally, field
+values evaluated at each particle are stored if
+\option{particles/include\_in\_particles/store\_old\_field} is set on
+the field. In the same manner, old attribute values are stored if
+\option{store\_old\_attribute} is set on the attribute. These old
+values are saved in checkpoints to ensure that calculations referring
+to previous timesteps can succeed.
 
-%The first checkpointed detector file has the extension .groups and contains
-%a header with the names of the groups of detectors in the order they were
-%read in the simulation. It also contains information about the number of
-%detectors in each group. This is to guarantee that when restarting from a
-%checkpoint, the detectors will be read in the same order and consequently
-%will be saved in that same order into the output detector file for
-%consistency.  The second checkpointed detector file has the extension
-%.positions.dat and contains the last position of the detectors at the time 
-%of checkpointing, in binary format.
+When particles are checkpointed, the particles options in the options
+tree or Diamond are updated so that in the new flml file the particles
+are set to initialise from the checkpoint files. This is done by
+loading the particle positions from file
+(\option{particle\_subgroup/initial\_position/from\_file}) and loading
+any attributes that are not dynamically computed
+(\option{attributes/attribute/from\_checkpoint\_file}).
 
-%No checkpointed detector files will be created if only static detectors are
-%defined in Diamond, since the position of these detectors remains always the
-%same. This is mainly used when Lagrangian detectors are set that are
-%advected by the flow and hence, their position changes as the simulation
-%proceeds.%
-
-%At the same time as creating the two files related to checkpointing of
-%detectors, the detector options in the options tree or Diamond are updated
-%so that in the new flml file the detectors are set to initialise from the
-%checkpoint detectors files \\
-%(\option{/io/detectors/detector\_array/from\_checkpoint\_file} or \\
-%\option{/io/detectors/lagrangian\_detector/from\_checkpoint\_file}). For
-%simplicity, the static detectors are also read from the checkpoint file that
-%contains the position of all detectors, static and Lagrangian
-%(\option{/io/detectors/static\_detector/from\_checkpoint\_file}).
-
-%Checkpoint filenames all end with [dump
-%no.]\_checkpoint[-[process]].[extension], where the process number is added
-%to the mesh, halo and field files in parallel.  The checkpoint detectors
-%filenames contain \_det after [dump no.]\_checkpoint. 
+Checkpoint filenames all end with [dump
+  no.]\_checkpoint[-[process]].[extension], where the process number
+is added to the mesh, halo and field files in parallel. The
+particle checkpoint filenames instead end with [dump
+  no.]\_checkpoint\_particles.[subgroup].h5part.
 
 A script is available at \lstinline[language = bash]+scripts/rename_checkpoint.py+ 
 that can be used to easily rename these filenames and there contents to continue 
@@ -374,17 +367,15 @@ If particles are selected, the user must specify \option{/particle\_group}, whic
 
 The option \option{/lagrangian\_timestepping} must be set to define particle movement. The user can define the order of the Runge-Kutta method to be used by defining the Butcher tableau and timestepping weights under \option{/explicit\_runge\_kutta\_guided\_search}. For convenience the first- and fourth-order Runge-Kutta method (\option{/forward\_euler\_guided\_search} and \option{/rk4\_guided\_search}) are available as pre-defined options. See section \ref{sec:lagrangian_trajectories} for more information on particle advection.
 
-ANGUS - Fix me... write a little here about particle and detector file format please...'
-
-The output of the detectors and particles is...
-
-%ascii file called
-%\option{name\_of\_simulation.detectors} where the name of the simulation has
-%been indicated in \option{/simulation\_name}. If binary output
-%\option{/io/detectors/} \option{binary\_output} option is enabled then the file containing the detector data is called
-%\option{name\_of\_simulation.detectors.dat} and in this case \option{name\_of\_simulation.detectors} contains only the header with the
-%information about the detectors (name of each detector, in which column the
-%position of each detector is stored, etc.).
+The output of both detectors and particles is in the H5Part format,
+which uses HDF5 for its underlying storage. This format is able to
+handle parallel readers and writers, as well as scaling from a single
+static detector to a large number of particles. All static detectors
+are written to a single file
+\option{simulation\_name.detectors.h5part}, where the name of the
+simulation has been indicated in \option{/simulation\_name}. Each
+particle subgroup is written to a separate file
+\option{simulation\_name.particles.subgroup\_name.h5part}.
 
 Note that the algorithm used to determine the element containing a particle assumes that the particle is known to be within the simulation domain.
 The option \option{/fail\_outside\_domain} will cause Fluidity to fail if a particle is found to be outside the domain boundaries. 

@@ -1957,82 +1957,51 @@ The volume fractions can be normalised by the total volume of the domain by acti
 
 \subsection{Detectors and Particles}
 \label{sec:diagnostics_detectors}
-The detectors file (in H5 format) contains information about the positions of the detectors and any information about the values of different flow variables at the positions of the detectors.
+The detectors file (in H5Part format) contains information about the positions of the detectors and any information about the values of different flow variables at the positions of the detectors.
 Both position and variable information are collected at run time. The user selects which field variables should be included in the detectors file by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different detectors positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/detectors} \option{/include\_in\_detectors} should be set. Only the fields of interest should be included since extra information will make the detectors file very large and more difficult to handle.
 
-Particle output files (also in H5 format) contain the position of particles over time (as they are adveceted by the flow), in addition to an attribute information that is stored on these particles The user selects which field variables should be accesible to the particles by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different particles positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/particles} \option{/include\_in\_particles} should be set. This field information is subsequently interpolated onto the particles and can be used to update specific attributes, as required.
+Particle output files (also in H5Part format) contain the position of particles over time (as they are adveceted by the flow), in addition to an attribute information that is stored on these particles The user selects which field variables should be accesible to the particles by setting the corresponding option in Diamond. For example, if interested in the value of Temperature at the different particles positions and at each time step, the option \option{\ldots/scalar\_field/prognostic/particles} \option{/include\_in\_particles} should be set. This field information is subsequently interpolated onto the particles and can be used to update specific attributes, as required.
 
 The information on detectors and particles can be visualised with Paraview. 
 
 \subsubsection{File format}
 \label{sec:detectors_output}
 
-ANGUS - Fix me... old text below - needs updating. Please write a little about the format for particle and detector files and how to access the data through h5py. Perhaps provide some examples as was done previously?
+Data for both detectors and particles is stored in the H5Part file
+format. This is an abstraction of the self-describing, hierarchical
+format HDF5. An example of the file structure for detectors is
+presented in \ref{meta_det}.
 
-%Similarly to the .stat file, the detectors file formats are ascii or plain text format and binary format.
+\begin{example}
+  \begin{lstlisting}
+HDF5 "tests/detectors/detectors.detectors.h5part" {
+FILE_CONTENTS {
+ group      /
+ attribute  /D1_ids
+ attribute  /D2_ids
+ attribute  /D3_ids
+ group      /Step#0
+ attribute  /Step#0/dt
+ attribute  /Step#0/time
+ dataset    /Step#0/Water_Tracer
+ dataset    /Step#0/Water_Velocity_x
+ dataset    /Step#0/Water_Velocity_y
+ dataset    /Step#0/id
+ dataset    /Step#0/x
+ dataset    /Step#0/y
+ dataset    /Step#0/z
+ }
+}
+  \end{lstlisting}
 
-%In plain text format, the .detectors file contains first an XML header followed by a section with the data. The header is contained within \lstinline[language = XML]*<header>* $\ldots$
-%\lstinline[language = XML]*</header>* tags and describes the content of each column in the data section. An example of the header is presented in \ref{header_det}.
+  \caption{An example of the H5Part file structure for static detectors}
+  \label{meta_det}
+\end{example}
 
-%\begin{example}
-%\begin{lstlisting}[language = XML]
-%<header>
-%<field column="1" name="ElapsedTime" statistic="value"/>
-%<field column="2" name="dt" statistic="value"/>
-%<field column="3" name="LAGRANGIAN_DET_000001" statistic="position" 
-%     components="3"/>
-%<field column="6" name="LAGRANGIAN_DET_000002" statistic="position" 
-%     components="3"/>
-%<field column="9" name="LAGRANGIAN_DET_000003" statistic="position" 
-%     components="3"/>
-%...
-%<field column="819348" name="Temperature" 
-%    statistic="LAGRANGIAN_DET_000001" material_phase="BoussinesqFluid"/>
-%<field column="819349" name="Temperature" 
-%    statistic="LAGRANGIAN_DET_000002" material_phase="BoussinesqFluid"/>
-%<field column="819350" name="Temperature" 
-%    statistic="LAGRANGIAN_DET_000003" material_phase="BoussinesqFluid"/>
-%...
-%<field column="983217" name="Velocity" statistic="LAGRANGIAN_DET_000001" 
-%    material_phase="BoussinesqFluid" components="3"/>
-%<field column="983220" name="Velocity" statistic="LAGRANGIAN_DET_000002" 
-%    material_phase="BoussinesqFluid" components="3"/>
-%<field column="983223" name="Velocity" statistic="LAGRANGIAN_DET_000003" 
-%    material_phase="BoussinesqFluid" components="3"/>
-%\end{lstlisting}
+The particle files can be easily read in python, using the \lstinline[language=python]*h5py* python module. For the example file in \ref{meta_det}, the \lstinline[language=python]*Water_Tracer* attribute can be accessed as follows:
 
-%\caption{An example of the header in .detectors file}
-%\label{header_det}
-%\end{example}
-
-%when having the \option{/io/detectors/binary\_output} option set in Diamond, the header is stored in a plain text file with the .detectors extension and the data is stored in binary in another file with .detectors.dat extension.
-
-%In order to read the .detectors files in python, the \lstinline[language = Python]*fluidity_tools* python module described in \ref{sec:diagnostics_stat_parser} should be used.
-
-%\begin{lstlisting}[language = Python]
-%import fluidity_tools
-%detectors = fluidity_tools.stat_parser(filename)
-%\end{lstlisting}
-
-%As indicated earlier, this python module reads both
-%plain text and binary file formats. For .detectors files using the binary
-%format, \lstinline[language = Python]*filename* should also correspond to the XML header file.
-
-%It is possible to find out which fields are contained in a state Water with:
-
-%\begin{lstlisting}[language=Python]
-%stat["Water"].keys()
-%\end{lstlisting}
-
-%The Temperature versus time for a particular detector can be plotted with the following python lines:
-
-%\begin{lstlisting}[language=Python]
-%from matplotlib import pylab
-%time = detectors["ElapsedTime"]["value"]
-%Temp = detectors["Water"]["Temperature"]["LAGRANGIAN_DET_000001"]
-%pylab.plot(time, Temp)
-%pylab.xlabel("Time")
-%pylab.ylabel("Temperature")
-%pylab.show()
-%\end{lstlisting}
-
+\begin{lstlisting}[language=python]
+import h5py
+f = h5py.File('detectors.detectors.h5part')
+tracer = f['/Step#0/Water_Tracer'][:]
+\end{lstlisting}
