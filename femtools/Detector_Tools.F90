@@ -52,10 +52,15 @@ module detector_tools
             delete, delete_all, pack_detector, unpack_detector, &
             detector_value, set_detector_coords_from_python, &
             detector_buffer_size, set_particle_attribute_from_python, &
-            set_particle_attribute_from_python_fields
+            set_particle_attribute_from_python_fields, temp_insert, &
+            temp_deallocate, temp_delete, temp_delete_all, temp_remove
 
   interface insert
      module procedure insert_into_detector_list
+  end interface
+
+  interface temp_insert
+     module procedure insert_into_temp_detector_list
   end interface
 
   ! Removes detector from a list without deallocating it
@@ -63,14 +68,29 @@ module detector_tools
      module procedure remove_detector_from_list
   end interface
 
+  ! Removes detector from a temp list without deallocating it
+  interface temp_remove
+     module procedure remove_detector_from_temp_list
+  end interface
+
   ! Removes detector from a list and deallocates it
   interface delete
      module procedure delete_detector
   end interface
 
+  ! Removes detector from a temp list
+  interface temp_delete
+     module procedure delete_temp_detector
+  end interface
+
   ! Deletes all detectors from a given list
   interface delete_all
      module procedure delete_all_detectors
+  end interface
+
+  ! Deletes all detectors from a given temp list
+  interface temp_delete_all
+     module procedure delete_all_temp_detectors
   end interface
 
   ! Move detector from one list to another
@@ -93,6 +113,10 @@ module detector_tools
 
   interface deallocate
      module procedure detector_deallocate, detector_list_deallocate
+  end interface
+
+  interface temp_deallocate
+     module procedure detector_list_temp_deallocate
   end interface
 
   ! Evaluate field at the location of the detector.
@@ -162,6 +186,16 @@ contains
        if(allocated(detector%attributes)) then
           deallocate(detector%attributes)
        end if
+       if(allocated(detector%old_attributes)) then
+          deallocate(detector%old_attributes)
+       end if
+       if(allocated(detector%old_fields)) then
+          deallocate(detector%old_fields)
+       end if
+       detector%next => null()
+       detector%previous => null()
+       detector%temp_next => null()
+       detector%temp_previous => null()
        deallocate(detector)
     end if
     detector => null()
@@ -201,6 +235,38 @@ contains
     end if
 
   end subroutine detector_list_deallocate
+
+  subroutine detector_list_temp_deallocate(detector_list)
+    type(detector_linked_list), pointer :: detector_list
+
+    type(rk_gs_parameters), pointer :: parameters
+    ! Delete detectors
+    if (detector_list%length > 0) then
+       call temp_delete_all(detector_list)
+    end if
+    ! Deallocate list information
+    if (allocated(detector_list%detector_names)) then
+       deallocate(detector_list%detector_names)
+    end if
+    if (allocated(detector_list%sfield_list)) then
+       deallocate(detector_list%sfield_list)
+    end if
+    if (allocated(detector_list%vfield_list)) then
+       deallocate(detector_list%vfield_list)
+    end if
+
+    ! Deallocate move_parameters
+    parameters => detector_list%move_parameters
+    if (associated(parameters)) then
+       if (allocated(parameters%timestep_weights)) then
+          deallocate(parameters%timestep_weights)
+       end if
+       if (allocated(parameters%stage_matrix)) then
+          deallocate(parameters%stage_matrix)
+       end if
+    end if
+
+  end subroutine detector_list_temp_deallocate
     
   subroutine detector_copy(new_detector, old_detector)
     ! Copies all the information from the old detector to
@@ -238,6 +304,27 @@ contains
 
   end subroutine insert_into_detector_list
 
+  subroutine insert_into_temp_detector_list(detector, current_list)
+    ! Inserts detector at the end of a list
+    type(detector_linked_list), intent(inout) :: current_list
+    type(detector_type), pointer :: detector
+
+    if (current_list%length == 0) then
+       current_list%first => detector 
+       current_list%last => detector 
+       current_list%first%temp_previous => null()
+       current_list%last%temp_next => null()
+       current_list%length = 1
+    else
+       detector%temp_previous => current_list%last
+       current_list%last%temp_next => detector
+       current_list%last => detector
+       current_list%last%temp_next => null()
+       current_list%length = current_list%length+1
+    end if
+
+  end subroutine insert_into_temp_detector_list
+
   subroutine remove_detector_from_list(detector, detector_list)
     !! Removes the detector from the list, 
     !! but does not deallocated it
@@ -260,10 +347,35 @@ contains
           detector_list%last => detector%previous
        end if
     end if
+    detector_list%length = detector_list%length-1
+    
+  end subroutine remove_detector_from_list
 
+  subroutine remove_detector_from_temp_list(detector, detector_list)
+    !! Removes the detector from the list,
+    !! but does not deallocated it
+    type(detector_linked_list), intent(inout) :: detector_list
+    type(detector_type), pointer :: detector
+
+    if (detector_list%length==1) then
+       detector_list%first => null()
+       detector_list%last => null()
+    else
+       if (associated(detector%temp_previous)) then
+          detector%temp_previous%temp_next => detector%temp_next
+       else
+          detector_list%first => detector%temp_next
+       end if
+
+       if (associated(detector%next)) then
+          detector%temp_next%temp_previous => detector%temp_previous
+       else
+          detector_list%last => detector%temp_previous
+       end if
+    end if
     detector_list%length = detector_list%length-1
 
-  end subroutine remove_detector_from_list
+  end subroutine remove_detector_from_temp_list
 
   subroutine delete_detector(detector, detector_list)
     ! Removes and deallocates the given detector 
@@ -283,6 +395,19 @@ contains
     end if
       
   end subroutine delete_detector
+
+  subroutine delete_temp_detector(detector, detector_list)
+    ! Removes and deallocates the given detector
+    ! and outputs the next detector in the list as detector
+    type(detector_type), pointer :: detector
+    type(detector_linked_list), intent(inout), optional :: detector_list
+    
+    type(detector_type), pointer :: temp_detector
+    temp_detector => detector
+    detector => detector%temp_next
+    call temp_remove(temp_detector, detector_list)
+    
+  end subroutine delete_temp_detector
 
   subroutine move_detector(detector, from_list, to_list)
     ! Move detector from one list to the other
@@ -319,6 +444,18 @@ contains
     end do
 
   end subroutine delete_all_detectors
+
+  subroutine delete_all_temp_detectors(detector_list)
+    ! Remove and deallocate all detectors in a list
+    type(detector_linked_list), intent(inout) :: detector_list
+    type(detector_type), pointer :: detector
+
+    detector => detector_list%first
+    do while (associated(detector))
+       call temp_delete(detector,detector_list)
+    end do
+
+  end subroutine delete_all_temp_detectors
 
   function detector_buffer_size(ndims, have_update_vector, nstages, attribute_size)
     ! Returns the number of reals we need to pack a detector
@@ -437,9 +574,11 @@ contains
        if (.not. allocated(detector%position)) then
           allocate(detector%position(ndims))
        end if
-       allocate(detector%attributes(attribute_size(1)))
-       allocate(detector%old_attributes(attribute_size(2)))
-       allocate(detector%old_fields(attribute_size(3)))
+       if (.not. allocated(detector%attributes)) then
+          allocate(detector%attributes(attribute_size(1)))
+          allocate(detector%old_attributes(attribute_size(2)))
+          allocate(detector%old_fields(attribute_size(3)))
+       end if
        ! Basic fields: ndims+3
        detector%position = buff(1:ndims)
        detector%element = buff(ndims+1)
@@ -612,7 +751,7 @@ contains
 
   end subroutine set_detector_coords_from_python
 
-  subroutine set_particle_attribute_from_python(attributes, positions, nparts, func, time)
+  subroutine set_particle_attribute_from_python(attributes, positions, nparts, func, time, dt)
     !!< Given the particle position and time, evaluate the specified python function for a group of particles
     !!< specified in the string func at that location. 
     real, dimension(:), intent(inout) :: attributes
@@ -623,6 +762,7 @@ contains
     character(len=*), intent(in) :: func !function for attributes to be set from
     integer, intent(in) :: nparts !number of particles
     real, intent(in) :: time !current simulation time
+    real, intent(in) :: dt !current timestep
     real, dimension(:,:), target, intent(in) :: positions !current particle positions
     real, dimension(:), pointer :: lvx,lvy,lvz
     real, dimension(0), target :: zero
@@ -643,7 +783,7 @@ contains
       lvz=>positions(3,:)
     end select
     call set_particles_from_python(func, len(func), size(positions(:,1)), &
-         nparts, lvx, lvy, lvz, time, attributes, stat)
+         nparts, lvx, lvy, lvz, time, dt, attributes, stat)
     if (stat/=0) then
       ewrite(-1, *) "Python error, Python string was:"
       ewrite(-1 , *) trim(func)
@@ -651,7 +791,7 @@ contains
     end if
   end subroutine set_particle_attribute_from_python
 
-  subroutine set_particle_attribute_from_python_fields(particle_list, state, xfield, positions, lcoords, ele, nparts, attributes, old_att_names, old_attributes, func, time)
+  subroutine set_particle_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, attributes, old_att_names, old_attributes, func, time, dt)
     !!< Given a particle position, time and field values, evaluate the python function
     !!< specified in the string func at that location. 
     !! Func may contain any python at all but the following function must
@@ -671,11 +811,11 @@ contains
     character(len=*), intent(in) :: func !function for attributes to be set from
     integer, intent(in) :: nparts !number of particles
     real, intent(in) :: time
+    real, intent(in) :: dt
     character, allocatable, dimension(:,:) :: field_names
     character, allocatable, dimension(:,:) :: old_field_names
     real, allocatable, dimension(:,:) :: field_vals
     real, allocatable, dimension(:,:) :: old_field_vals
-    type(vector_field), pointer :: xfield
     real :: value
     real, dimension(:), pointer :: lvx,lvy,lvz
     real, dimension(0), target :: zero
@@ -768,9 +908,9 @@ contains
           particle=>particle%next
        end do
     end if
-
+    
     call set_particles_from_python_fields(func, len(func), size(positions(:,1)), nparts, &
-         lvx, lvy, lvz, time, nfields, field_names, field_vals, old_nfields, old_field_names, &
+         lvx, lvy, lvz, time, dt, nfields, field_names, field_vals, old_nfields, old_field_names, &
          old_field_vals, old_nattributes, old_att_names, old_attributes, attributes, stat)
     if (stat/=0) then
        ewrite(-1, *) "Python error, Python string was:"

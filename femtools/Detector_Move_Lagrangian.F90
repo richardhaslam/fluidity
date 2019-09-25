@@ -396,14 +396,17 @@ contains
     type(vector_field), pointer, intent(in) :: vfield,xfield
     real, intent(in) :: search_tolerance
 
-    type(detector_type), pointer :: det0, det_send
+    type(detector_type), pointer :: det0, det_send, det_next
     integer :: det_count
     logical :: owned
     real, dimension(mesh_dim(vfield)+1) :: arrival_local_coords
     integer, dimension(:), pointer :: neigh_list
-    integer :: neigh, proc_local_number
-    logical :: make_static
+    integer :: neigh, proc_local_number, deleted_detectors
+    logical :: make_static, make_delete
 
+    make_delete=have_option("/particles/moving_outside_domain/delete")
+    deleted_detectors=0
+    
     !Loop over all the detectors
     det0 => detector_list%first
     do while (associated(det0))
@@ -446,7 +449,27 @@ contains
                          exit face_search
                       end if
                    end do face_search
-                   if (make_static) then
+                   if (make_delete) then
+                      ewrite(1,*) "WARNING: detector attempted to leave computational &
+                           domain; deleting detector, detector ID:", det0%id_number, "detector element:", det0%element
+                      if (associated(det0%previous)) then
+                         det0%previous%next => det0%next
+                      else
+                         detector_list%first => det0%next
+                      end if
+                      if (associated(det0%next)) then
+                         det0%next%previous => det0%previous
+                      else
+                         detector_list%last => det0%previous
+                      end if
+                      detector_list%length = detector_list%length -1
+                      deleted_detectors=deleted_detectors+1
+                      det_next => det0%next
+                      call deallocate(det0)
+                      det0 => det_next
+                      det_next => null()
+                      exit search_loop
+                   else if (make_static) then
                       ewrite(1,*) "WARNING: detector attempted to leave computational &
                            domain; making it static, detector ID:", det0%id_number, "detector element:", det0%element
                       det0%type=STATIC_DETECTOR
@@ -472,6 +495,9 @@ contains
           det0 => det0%next
        end if
     end do
+    call allsum(deleted_detectors)
+    detector_list%total_num_det = detector_list%total_num_det-deleted_detectors
+    
   end subroutine move_detectors_guided_search
 
 end module detector_move_lagrangian

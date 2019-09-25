@@ -418,13 +418,53 @@ and deleting options.</a:documentation>
                   <data type="string"/>
                 </attribute>
                 <element name="velocity_field">
+                  <a:documentation>Velocity field utilized for particle advection.</a:documentation>
                   <attribute name="name">
                     <data type="string"/>
                   </attribute>
                 </element>
+                <optional>
+                  <element name="particle_spawning">
+                    <a:documentation>Options for spawning and deleting particles based on the minimum and maximum limits of particles per control volume. Defined per particle_group.</a:documentation>
+                    <ref name="mesh_choice">
+                      <a:documentation>Set the mesh which will be used for particle spawning. Currently only works for a P1CV mesh!</a:documentation>
+                    </ref>
+                    <element name="min_cv_threshhold">
+                      <a:documentation>Minimum number of particles per control volume.</a:documentation>
+                      <ref name="integer"/>
+                    </element>
+                    <element name="max_cv_threshhold">
+                      <a:documentation>Maximum number of particles per control volume (recommended to be at least four times the minimum threshold).</a:documentation>
+                      <ref name="integer"/>
+                    </element>
+                    <element name="spawn_location">
+                      <a:documentation>Options for setting where particles will be spawned within the control volume</a:documentation>
+                      <choice>
+                        <element name="radius">
+                          <a:documentation>Particles will spawn within a radius of the parent particle (ensuring they remain within the current element and control volume).
+Value is in local coordinates (recommended value 0.05).</a:documentation>
+                          <ref name="real"/>
+                        </element>
+                        <element name="random">
+                          <a:documentation>Particles will spawn randomly within the control volume.</a:documentation>
+                          <empty/>
+                        </element>
+                      </choice>
+                    </element>
+                    <optional>
+                      <element name="subgroup_spawning_caps">
+                        <a:documentation>Option to set spawning caps for specific particle subgroups if one is dominant in a control volume.</a:documentation>
+                        <element name="percentage">
+                          <a:documentation>Percentage of single subgroup required to be present for only that subgroup to spawn within a specific control volume.</a:documentation>
+                          <ref name="real"/>
+                        </element>
+                      </element>
+                    </optional>
+                  </element>
+                </optional>
                 <oneOrMore>
                   <element name="particle_subgroup">
-                    <a:documentation>Particle subgroups arrays specified within a particle group. All subgroups utilize the same velocity field
+                    <a:documentation>Particle subgroup arrays specified within a particle group. All subgroups utilize the same velocity field
 and carry the same attributes. Subgroups can have different initial positions specified via a python
 function of from a file.</a:documentation>
                     <attribute name="name">
@@ -467,7 +507,7 @@ The t argument is for future use only - currently particle locations are only se
                     </element>
                     <optional>
                       <element name="attributes">
-                        <a:documentation>Define particle attributes</a:documentation>
+                        <a:documentation>Define particle attributes.</a:documentation>
                         <oneOrMore>
                           <element name="attribute">
                             <attribute name="name">
@@ -483,16 +523,13 @@ The t argument is for future use only - currently particle locations are only se
               </element>
             </oneOrMore>
           </zeroOrMore>
-          <choice>
-            <element name="fail_outside_domain">
-              <a:documentation>By default Fluidity will fail if a particle has left the domain.</a:documentation>
+          <element name="moving_outside_domain">
+            <a:documentation>Options for particles being advected outside the computational domain.</a:documentation>
+            <element name="delete">
+              <a:documentation>By default Fluidity will delete particles if they move outside the domain.</a:documentation>
               <empty/>
             </element>
-            <element name="write_nan_outside_domain">
-              <a:documentation>Enable to write NaN values to particle output if a particle has left the domain.</a:documentation>
-              <empty/>
-            </element>
-          </choice>
+          </element>
           <optional>
             <element name="ascii_output">
               <a:documentation>Enable to write particle output in ascii format</a:documentation>
@@ -505,7 +542,9 @@ The t argument is for future use only - currently particle locations are only se
               <empty/>
             </element>
           </optional>
-          <ref name="lagrangian_timestepping"/>
+          <ref name="lagrangian_timestepping">
+            <a:documentation>Lagrangian timestepping options for particle advection.</a:documentation>
+          </ref>
         </element>
       </optional>
       <element name="timestepping">
@@ -3649,6 +3688,9 @@ guided search particle tracking</a:documentation>
     <optional>
       <ref name="interpolation_algorithm_scalar"/>
     </optional>
+    <optional>
+      <ref name="initialise_after_particles"/>
+    </optional>
   </define>
   <!-- Default child of diagnostic scalar field without adaptivity options -->
   <define name="diagnostic_scalar_field_no_adapt">
@@ -4774,7 +4816,7 @@ i.e. excluding the components</a:documentation>
       <element name="python">
         <a:documentation>Python function prescribing real input. Functions should be of the form:
 
- def val(X, t):
+ def val(X, t, dt):
     # Function code
     return # Return value
 
@@ -4784,14 +4826,14 @@ where X is a tuple of length geometry dimension.</a:documentation>
       <element name="python_fields">
         <a:documentation>Python function prescribing real input. Functions should be of the form:
 
- def val (X, t, fields):
+ def val (X, t, dt, fields):
     # Function code
     return # Return value
 
  where X is a tuple of length geometry dimension.
 
  E.g. if Temperature field and x position are required
- def val (X, t, fields):
+ def val (X, t, dt, fields):
    x = X[0]
    y = x + fields["Temperature"]
    return y</a:documentation>
@@ -8837,6 +8879,13 @@ This determines the order in which scalar_fields are solved for:
     <element name="do_not_recalculate">
       <a:documentation>Prevent this field from being recalculated at every timestep.
 This is cheaper especially if you are enforcing discrete properties on the field.</a:documentation>
+      <empty/>
+    </element>
+  </define>
+  <define name="initialise_after_particles">
+    <element name="init_after_particles">
+      <a:documentation>Initiliase this scalar field after particle attributes have
+been initialised.</a:documentation>
       <empty/>
     </element>
   </define>
