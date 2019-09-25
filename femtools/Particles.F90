@@ -1080,7 +1080,7 @@ contains
     end do
 
     do n = 1, ntensor
-      attr_key = trim(subgroup_path) // 'attributes/tensor_attribute['//int2str(n-1)//']'
+      attr_key = trim(subgroup_path) // '/attributes/tensor_attribute['//int2str(n-1)//']'
 
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', tconstant)
