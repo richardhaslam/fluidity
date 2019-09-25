@@ -1339,14 +1339,14 @@ contains
     att = 1
     scalar_attr_loop: do i = 1, size(names%s)
       h5_ierror = h5pt_writedata_r8(h5_id, &
-           trim(p)//names%s(i), vals(:,att))
+           trim(p)//trim(names%s(i)), vals(:,att))
       att = att + 1
     end do scalar_attr_loop
 
     vector_attr_loop: do i = 1, size(names%v)
       do j = 1, dim
         h5_ierror = h5pt_writedata_r8(h5_id, &
-             trim(p)//names%v(i)//"_"//int2str(j), vals(:,att))
+             trim(p)//trim(names%v(i))//"_"//int2str(j), vals(:,att))
         att = att + 1
       end do
     end do vector_attr_loop
@@ -1355,7 +1355,7 @@ contains
       do j = 1, dim
         do k = 1, dim
           h5_ierror = h5pt_writedata_r8(h5_id, &
-               trim(p)//names%t(i)//"_"//int2str(j)//int2str(k), vals(:,att))
+               trim(p)//trim(names%t(i))//"_"//int2str(j)//int2str(k), vals(:,att))
           att = att + 1
         end do
       end do
