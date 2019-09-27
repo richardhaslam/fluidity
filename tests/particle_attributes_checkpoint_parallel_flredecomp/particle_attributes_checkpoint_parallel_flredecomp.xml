@@ -20,7 +20,7 @@ import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Thomas.h5part', 'r')
 n = len(f)-1
-att_chem1 = f[f'/Step#{n}/Chem1'][:]
+att_chem1 = f['/Step#{}/Chem1'.format(n)][:]
 attributes_error = att_chem1 - 5.0
 attributes_error_1=abs(attributes_error).max()
 
@@ -31,13 +31,13 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Thomas.h5part', 'r')
-n = len(f)-2
-idx = np.argsort(f[f'/Step#{n}/id'])
-pos = np.vstack((f[f'/Step#{n}/x'], f[f'/Step#{n}/y']))[:,idx]
-elapsed_time = f[f'/Step#{n}'].attrs['time'].item()
-n = len(f)-1
-idx = np.argsort(f[f'/Step#{n}/id'])
-att_chem2 = f[f'/Step#{n}/Chem2'][:][idx]
+d = f['/Step#{}'.format(len(f)-2)]
+idx = np.argsort(d['id'])
+pos = np.vstack((d['x'], d['y']))[:,idx]
+elapsed_time = d.attrs['time'].item()
+d = f['/Step#{}'.format(len(f)-1)]
+idx = np.argsort(d['id'])
+att_chem2 = d['Chem2'][:][idx]
 
 attributes_error = np.zeros(60)
 for i in range(60):
@@ -52,10 +52,10 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Chris.h5part', 'r')
-n = len(f)-1
-xpos = f[f'/Step#{n}/x'][:]
-att_chem1 = f[f'/Step#{n}/Chem1'][:]
-elapsed_time = f[f'/Step#{n}'].attrs['time'].item()
+d = f['/Step#{}'.format(len(f)-1)]
+xpos = d['x'][:]
+att_chem1 = d['Chem1'][:]
+elapsed_time = d.attrs['time'].item()
 
 attributes_error = att_chem1 - (xpos + elapsed_time)
 attributes_error_3=abs(attributes_error).max()
@@ -66,10 +66,10 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Chris.h5part', 'r')
-n = len(f)-1
-pos = np.vstack((f[f'/Step#{n}/x'], f[f'/Step#{n}/y']))
-att_chem2 = f[f'/Step#{n}/Chem2'][:]
-elapsed_time = f[f'/Step#{n}'].attrs['time'].item()
+d = f['/Step#{}'.format(len(f)-1)]
+pos = np.vstack((d['x'], d['y']))
+att_chem2 = d['Chem2'][:]
+elapsed_time = d.attrs['time'].item()
 
 attributes_error_4 = np.zeros((1,100))
 sq_error=0
@@ -86,12 +86,12 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Chris.h5part', 'r')
-n = len(f)-1
-idx = np.argsort(f[f'/Step#{n}/id'])
-att_chem3 = f[f'/Step#{n}/Chem3'][:][idx]
-n = len(f)-2
-idx = np.argsort(f[f'/Step#{n}/id'])
-att_chem2 = f[f'/Step#{n}/Chem2'][:][idx]
+d = f['/Step#{}'.format(len(f)-1)]
+idx = np.argsort(d['id'])
+att_chem3 = d['Chem3'][:][idx]
+d = f['/Step#{}'.format(len(f)-2)]
+idx = np.argsort(d['id'])
+att_chem2 = d['Chem2'][:][idx]
 
 attributes_error = att_chem3 - att_chem2
 attributes_error_5=abs(attributes_error).max()
@@ -102,15 +102,15 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes_checkpoint.particles.Steph.h5part', 'r')
-n = len(f)-1
-idx = np.argsort(f[f'/Step#{n}/id'])
-pos = np.vstack((f[f'/Step#{n}/x'], f[f'/Step#{n}/y']))[:,idx]
-att_chem4 = f[f'/Step#{n}/Chem4'][:][idx]
-newtime = f[f'/Step#{n}'].attrs['time'].item()
-n = len(f)-2
-idx = np.argsort(f[f'/Step#{n}/id'])
-old_pos = np.vstack((f[f'/Step#{n}/x'], f[f'/Step#{n}/y']))[:,idx]
-oldtime = f[f'/Step#{n}'].attrs['time'].item()
+d = f['/Step#{}'.format(len(f)-1)]
+idx = np.argsort(d['id'])
+pos = np.vstack((d['x'], d['y']))[:,idx]
+att_chem4 = d['Chem4'][:][idx]
+newtime = d.attrs['time'].item()
+d = f['/Step#{}'.format(len(f)-2)]
+idx = np.argsort(d['id'])
+old_pos = np.vstack((d['x'], d['y']))[:,idx]
+oldtime = d.attrs['time'].item()
 
 attributes_error_6 = np.zeros((1,80))
 sq_error = 0
@@ -130,7 +130,7 @@ import h5py
 f = h5py.File('particle_attributes_checkpoint.particles.BMW.h5part', 'r')
 n = len(f)-1
 
-att_dt = f[f'/Step#{n}/dt'][:]
+att_dt = f['/Step#{}/dt'.format(n)][:]
 
 attributes_error = att_dt - 0.01
 old_attribute_error = abs(attributes_error).max()

@@ -20,9 +20,9 @@ solvers_converged = not "matrixdump" in files and not "matrixdump.info" in files
 import h5py
 import numpy as np
 f = h5py.File('VK_Case_1b.detectors.h5part', 'r')
-n = len(f) - 1
-det_id, = np.where(f[f'/Step#{n}/id'][:] == f.attrs['Temperature6060_ids'][0])
-T60 = f[f'/Step#{n}/Fluid_Temperature'][det_id[0]] - 273.
+d = f['/Step#{}'.format(len(f) - 1)]
+det_id, = np.where(d['id'][:] == f.attrs['Temperature6060_ids'][0])
+T60 = d['Fluid_Temperature'][det_id[0]] - 273.
 </variable>
 
 <variable name="TL2SLAB" language="python">
@@ -35,8 +35,8 @@ tslab_ids = f.attrs['TSlab_ids']
 s = np.zeros(len(f))
 
 for i in range(len(f)):
-  ids = np.where(f[f'/Step#{i}/id'][:] == tslab_ids[:,None])[1]
-  s[i] = np.sum((f[f'/Step#{i}/Fluid_Temperature'][:][ids] - 273.)**2)
+  ids = np.where(f['/Step#{}/id'.format(i)][:] == tslab_ids[:,None])[1]
+  s[i] = np.sum((f['/Step#{}/Fluid_Temperature'.format(i)][:][ids] - 273.)**2)
 
 TL2 = [math.sqrt(s) for s in s/36]
 TL2SLAB = TL2[-1]<comment>Computes the L2 Temperature norm in 36 equidistant points along the slab, close to the wedge corner.</comment>
@@ -52,8 +52,8 @@ twedge_ids = f.attrs['TWedge_ids']
 s = np.zeros(len(f))
 
 for i in range(len(f)):
-  ids = np.where(f[f'/Step#{i}/id'][:] == twedge_ids[:,None])[1]
-  s[i] = np.sum((f[f'/Step#{i}/Fluid_Temperature'][:][ids] - 273.)**2)
+  ids = np.where(f['/Step#{}/id'.format(i)][:] == twedge_ids[:,None])[1]
+  s[i] = np.sum((f['/Step#{}/Fluid_Temperature'.format(i)][:][ids] - 273.)**2)
 
 TL2 = [math.sqrt(s) for s in s/78]
 TL2WEDGE = TL2[-1]<comment>Computes the L2 Temperature norm for 78 points in the wedge corner.</comment>
@@ -63,36 +63,36 @@ TL2WEDGE = TL2[-1]<comment>Computes the L2 Temperature norm for 78 points in the
 import h5py
 import numpy as np
 f = h5py.File('VK_Case_1b.detectors.h5part', 'r')
-n = len(f) - 1
-det_id, = np.where(f[f'/Step#{n}/id'][:] == f.attrs['Pressure_up_ids'][0])
-HORIZ_GRADIENT_ONE = f[f'/Step#{n}/Fluid_FiniteElementGradient_x'][det_id[0]]
+d = f['/Step#{}'.format(len(f) - 1)]
+det_id, = np.where(d['id'][:] == f.attrs['Pressure_up_ids'][0])
+HORIZ_GRADIENT_ONE = d['Fluid_FiniteElementGradient_x'][det_id[0]]
 </variable>
 
 <variable name="VERTICAL_GRADIENT_ONE" language="python">
 import h5py
 import numpy as np
 f = h5py.File('VK_Case_1b.detectors.h5part', 'r')
-n = len(f) - 1
-det_id, = np.where(f[f'/Step#{n}/id'][:] == f.attrs['Pressure_up_ids'][0])
-VERTICAL_GRADIENT_ONE = -f[f'/Step#{n}/Fluid_FiniteElementGradient_y'][det_id[0]]
+d = f['/Step#{}'.format(len(f) - 1)]
+det_id, = np.where(d['id'][:] == f.attrs['Pressure_up_ids'][0])
+VERTICAL_GRADIENT_ONE = -d['Fluid_FiniteElementGradient_y'][det_id[0]]
 </variable>
 
 <variable name="HORIZ_GRADIENT_TWO" language="python">
 import h5py
 import numpy as np
 f = h5py.File('VK_Case_1b.detectors.h5part', 'r')
-n = len(f) - 1
-det_id, = np.where(f[f'/Step#{n}/id'][:] == f.attrs['Pressure_down_ids'][0])
-HORIZ_GRADIENT_TWO = f[f'/Step#{n}/Fluid_FiniteElementGradient_x'][det_id[0]]
+d = f['/Step#{}'.format(len(f) - 1)]
+det_id, = np.where(d['id'][:] == f.attrs['Pressure_down_ids'][0])
+HORIZ_GRADIENT_TWO = d['Fluid_FiniteElementGradient_x'][det_id[0]]
 </variable>
 
 <variable name="VERTICAL_GRADIENT_TWO" language="python">
 import h5py
 import numpy as np
 f = h5py.File('VK_Case_1b.detectors.h5part', 'r')
-n = len(f) - 1
-det_id, = np.where(f[f'/Step#{n}/id'][:] == f.attrs['Pressure_down_ids'][0])
-VERTICAL_GRADIENT_TWO = -f[f'/Step#{n}/Fluid_FiniteElementGradient_y'][det_id[0]]
+d = f['/Step#{}'.format(len(f) - 1)]
+det_id, = np.where(d['id'][:] == f.attrs['Pressure_down_ids'][0])
+VERTICAL_GRADIENT_TWO = -d['Fluid_FiniteElementGradient_y'][det_id[0]]
 </variable>
 
 </variables>

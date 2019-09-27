@@ -21,7 +21,7 @@ detectors = h5py.File("detectors.detectors.h5part", "r")</variable>
 import numpy as np
 import h5py
 detectors = h5py.File("detectors.detectors.h5part", "r")
-water_velocity = np.vstack([detectors[f'/Step#0/Water_Velocity_{dim}'] for dim in ('x', 'y')])</variable>
+water_velocity = np.vstack([detectors['/Step#0/Water_Velocity_{}'.format(dim)] for dim in ('x', 'y')])</variable>
   </variables>
   <pass_tests>
     <test name="Solvers converged" language="python">

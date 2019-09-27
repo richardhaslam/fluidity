@@ -16,11 +16,11 @@ import numpy as np
 import h5py
 
 f = h5py.File('lagrange_tracer.particles.SingleParticle.h5part', 'r')
-n = len(f)-1
+d = f['/Step#{}'.format(len(f)-1)]
 
-detector_0 = {'x': f[f'/Step#{n}/x'][0],
-              'y': f[f'/Step#{n}/y'][0],
-              'value': f[f'/Step#{n}/field'][0]}
+detector_0 = {'x': d['x'][0],
+              'y': d['y'][0],
+              'value': d['field'][0]}
     </variable>
   </variables>
   <pass_tests>
