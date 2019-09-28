@@ -361,9 +361,7 @@ def val(t):
   \label{examp:python_function_detectors_1}
 \end{example}
 
-CHRIS - Fix me... write a little here about the various options under particle tree. 
-
-If particles are selected, the user must specify \option{/particle\_group}, which is... and a \option{/particle\_subgroup}. Groups and subgroups are distinguished by... Under each subgroup, the number of particles must be specified, in addition to their initial position... Any attributes that the user wants to calculate and/or track on particles should be set under... 
+If particles are selected, the user must specify \option{/particle\_group}, each of which can contain multiple \option{/particle\_subgroup}. Particle groups also define particle IO options, such as \option{/dump\_period}, \option{/cpu\_dump\_period} and \option{/wall\_time\_dump\_period}, as well as particle spawning and deleting options, contained under \option{/particle\_spawning}. Each subgroup within a particle group will be governed by the same specified set of parameters. Particle subgroups define an array of particles, each of which is initialized with a specified \option{/number\_of\_particles} and \option{/initial\_position}. Particle attributes are defined per particle subgroup under the option \option{/attributes}. These attributes allow users to calculate and track variables on particles and can be set either as a constant, from python, or from python\_fields, which incorporates any fields values having the option \option{/include\_in\_particles} enabled. Old field values and old particle attributes can also be utilized under the python\_fields category, assuming the corresponding \option{/store\_old\_field} or \option{/store\_old\_attribute} option is enabled. Particle attributes can be set as either scalars, vectors or tensors, allowing for a wide variety of uses and applications.
 
 The option \option{/lagrangian\_timestepping} must be set to define particle movement. The user can define the order of the Runge-Kutta method to be used by defining the Butcher tableau and timestepping weights under \option{/explicit\_runge\_kutta\_guided\_search}. For convenience the first- and fourth-order Runge-Kutta method (\option{/forward\_euler\_guided\_search} and \option{/rk4\_guided\_search}) are available as pre-defined options. See section \ref{sec:lagrangian_trajectories} for more information on particle advection.
 
@@ -383,7 +381,7 @@ This option should be the default choice when creating new simulations. If parti
 \option{/write\_nan\_outside\_domain} will cause Fluidity to write "NaN" values 
 to the particle output in this case.
 
-If \option{/move\_with\_mesh} is selected with any mesh movement algorithm detectors will move according to the mesh displacement. That is to say that a static detector will remain static with reference to the domain boundaries rather than its true physical coordinates.
+If \option{/move\_with\_mesh} is selected with any mesh movement algorithm, detectors will move according to the mesh displacement. That is to say that a static detector will remain static with reference to the domain boundaries rather than its true physical coordinates.
 
 \subsubsection{Log output}
 
