@@ -20,7 +20,7 @@ detector_steps = len(h5py.File('detectors.detectors.h5part', 'r'))</variable>
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_positions = np.vstack([f[f'/Step#0/{dim}'] for dim in ('x', 'y')])</variable>
+det_positions = np.vstack([f['/Step#0/{}'.format(dim)] for dim in ('x', 'y')])</variable>
   </variables>
   <pass_tests>
     <test name="Solvers converged" language="python">assert(solvers_converged)</test>
