@@ -314,9 +314,6 @@ start =
                ## and deleting options.
                element particle_group {
                   attribute name { xsd:string },
-                  element velocity_field {
-                     attribute name { xsd:string }
-                  },
 		  (
 		      ## Period between dumps in time units.
 		      element dump_period {

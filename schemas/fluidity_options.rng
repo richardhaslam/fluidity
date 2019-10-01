@@ -387,11 +387,6 @@ and deleting options.</a:documentation>
                 <attribute name="name">
                   <data type="string"/>
                 </attribute>
-                <element name="velocity_field">
-                  <attribute name="name">
-                    <data type="string"/>
-                  </attribute>
-                </element>
                 <optional>
                   <choice>
                     <element name="dump_period">
