@@ -239,6 +239,7 @@ contains
     character(len = FIELD_NAME_LEN) :: fmt
     character(len=FIELD_NAME_LEN) :: particle_name
     real, allocatable, dimension(:,:) :: coords !array to hold coordinates of particles for initialisation
+    real :: dt
     integer :: l, str_size
 
     ewrite(2,*) "Reading particles from options"
@@ -255,7 +256,8 @@ contains
             l, LAGRANGIAN_DETECTOR, trim(particle_name), attribute_size, global=global)
     end do
     if (attribute_size(1)/=0) then
-       call update_particle_subgroup_attributes_and_fields(state, xfield, current_time, subgroup_path, p_list)
+       call get_option("/timestepping/timestep", dt)
+       call update_particle_subgroup_attributes_and_fields(state, xfield, current_time, dt, subgroup_path, p_list)
     end if
 
     deallocate(coords)
@@ -533,10 +535,11 @@ contains
 
   end subroutine move_particles
 
-  subroutine update_particle_subgroup_attributes_and_fields(state, xfield, time, subgroup_path, p_list)
+  subroutine update_particle_subgroup_attributes_and_fields(state, xfield, time, dt, subgroup_path, p_list)
     !!Routine to set particle attributes
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: time
+    real, intent(in) :: dt
     type(vector_field), pointer, intent(in) :: xfield
     character(len=OPTION_PATH_LEN), intent(in) :: subgroup_path
     type(detector_linked_list), intent(in) :: p_list
@@ -603,11 +606,11 @@ contains
           attribute_array(n+1,:) = constant
        else if (have_option(trim(subgroup_path) // '/attributes/attribute['//int2str(n)//']/python')) then
           call get_option(trim(subgroup_path) // '/attributes/attribute['//int2str(n)//']/python', func)
-          call set_particle_attribute_from_python(attribute_array(n+1,:), positions(:,:), nparticles, func, time)
+          call set_particle_attribute_from_python(attribute_array(n+1,:), positions(:,:), nparticles, func, time, dt)
        else if (have_option(trim(subgroup_path) // '/attributes/attribute['//int2str(n)//']/python_fields')) then
           call get_option(trim(subgroup_path) // '/attributes/attribute['//int2str(n)//']/python_fields', func)
           call set_particle_attribute_from_python_fields(p_list, state, xfield, positions(:,:), lcoords(:,:), ele(:), nparticles, &
-               & attribute_array(n+1,:), old_att_names, old_attributes, func, time)
+               & attribute_array(n+1,:), old_att_names, old_attributes, func, time, dt)
        else if (have_option(trim(subgroup_path) // '/attributes/attribute['//int2str(n)//']/from_checkpoint_file')) then
           particle => p_list%first
           attribute_array(n+1,:) = particle%attributes(n+1)
@@ -657,10 +660,11 @@ contains
 
   end subroutine update_particle_subgroup_attributes_and_fields
 
-  subroutine update_particle_attributes_and_fields(state, time)
+  subroutine update_particle_attributes_and_fields(state, time, dt)
     !!Routine to loop over particle arrays and update particle attributes
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: time
+    real, intent(in) :: dt
     type(vector_field), pointer :: xfield
     type(detector_type), pointer :: particle
     character(len = OPTION_PATH_LEN) :: group_path, subgroup_path
@@ -698,7 +702,7 @@ contains
           end if
           particle => particle_lists(list_counter)%first
           if (size(particle%attributes)/=0) then
-             call update_particle_subgroup_attributes_and_fields(state, xfield, time, subgroup_path, particle_lists(list_counter))
+             call update_particle_subgroup_attributes_and_fields(state, xfield, time, dt, subgroup_path, particle_lists(list_counter))
           end if
           list_counter = list_counter + 1
        end do

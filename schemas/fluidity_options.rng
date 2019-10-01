@@ -4783,7 +4783,7 @@ i.e. excluding the components</a:documentation>
       <element name="python">
         <a:documentation>Python function prescribing real input. Functions should be of the form:
 
- def val(X, t):
+ def val(X, t, dt):
     # Function code
     return # Return value
 
@@ -4793,14 +4793,14 @@ where X is a tuple of length geometry dimension.</a:documentation>
       <element name="python_fields">
         <a:documentation>Python function prescribing real input. Functions should be of the form:
 
- def val (X, t, fields):
+ def val (X, t, dt, fields):
     # Function code
     return # Return value
 
  where X is a tuple of length geometry dimension.
 
  E.g. if Temperature field and x position are required
- def val (X, t, fields):
+ def val (X, t, dt, fields):
    x = X[0]
    y = x + fields["Temperature"]
    return y</a:documentation>
