@@ -106,7 +106,7 @@ contains
     do i = 1, particle_groups
       group_path = "/particles/particle_group["//int2str(i-1)//"]"
 
-      call init_output_CS(output_CS(i), group_path)
+      call init_output_CS(output_CS(i), trim(group_path) // "/particle_io")
 
       ! count subgroups for this group
       particle_arrays(i) = option_count(trim(group_path) // "/particle_subgroup")
@@ -774,7 +774,7 @@ contains
       group_path = "/particles/particle_group["//int2str(i-1)//"]"
       particle_subgroups = option_count(trim(group_path) // "/particle_subgroup")
 
-      output_group = should_output(output_CS(i), time, timestep, group_path)
+      output_group = should_output(output_CS(i), time, timestep, trim(group_path) // "/particle_io")
       if (output_group) then
         call update_output_CS(output_CS(i), time)
       end if

@@ -343,54 +343,58 @@ and deleting options.</a:documentation>
                   <data type="string"/>
                 </attribute>
                 <optional>
-                  <choice>
-                    <element name="dump_period">
-                      <a:documentation>Period between dumps in time units.</a:documentation>
+                  <element name="particle_io">
+                    <optional>
                       <choice>
-                        <element name="constant">
-                          <ref name="real"/>
-                        </element>
-                        <element name="python">
-                          <a:documentation>Python function prescribing real input. Functions should be of the form:
+                        <element name="dump_period">
+                          <a:documentation>Period between dumps in time units.</a:documentation>
+                          <choice>
+                            <element name="constant">
+                              <ref name="real"/>
+                            </element>
+                            <element name="python">
+                              <a:documentation>Python function prescribing real input. Functions should be of the form:
 
  def val(t):
     # Function code
     return # Return value
 </a:documentation>
-                          <ref name="python_code"/>
+                              <ref name="python_code"/>
+                            </element>
+                          </choice>
                         </element>
-                      </choice>
-                    </element>
-                    <element name="dump_period_in_timesteps">
-                      <a:documentation>Dump period, in timesteps.</a:documentation>
-                      <choice>
-                        <element name="constant">
-                          <ref name="integer"/>
-                        </element>
-                        <element name="python">
-                          <a:documentation>Python function prescribing integer input. Functions should be of the form:
+                        <element name="dump_period_in_timesteps">
+                          <a:documentation>Dump period, in timesteps.</a:documentation>
+                          <choice>
+                            <element name="constant">
+                              <ref name="integer"/>
+                            </element>
+                            <element name="python">
+                              <a:documentation>Python function prescribing integer input. Functions should be of the form:
 
  def val(t):
     # Function code
     return # Return value
 </a:documentation>
-                          <ref name="python_code"/>
+                              <ref name="python_code"/>
+                            </element>
+                          </choice>
                         </element>
                       </choice>
-                    </element>
-                  </choice>
-                </optional>
-                <optional>
-                  <!-- every CPUDUM seconds write results to disc. -->
-                  <element name="cpu_dump_period">
-                    <a:documentation>This is usually disabled.</a:documentation>
-                    <ref name="real"/>
-                  </element>
-                </optional>
-                <optional>
-                  <element name="wall_time_dump_period">
-                    <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
-                    <ref name="real"/>
+                    </optional>
+                    <optional>
+                      <!-- every CPUDUM seconds write results to disc. -->
+                      <element name="cpu_dump_period">
+                        <a:documentation>This is usually disabled.</a:documentation>
+                        <ref name="real"/>
+                      </element>
+                    </optional>
+                    <optional>
+                      <element name="wall_time_dump_period">
+                        <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
+                        <ref name="real"/>
+                      </element>
+                    </optional>
                   </element>
                 </optional>
                 <oneOrMore>

@@ -279,51 +279,53 @@ start =
                ## and deleting options.
                element particle_group {
                   attribute name { xsd:string },
-		  (
-		      ## Period between dumps in time units.
-		      element dump_period {
-			  (
-			      element constant {
-				  real
-			      }|
-			      ## Python function prescribing real input. Functions should be of the form:
-			      ##
-			      ##  def val(t):
-			      ##     # Function code
-			      ##     return # Return value
-			      ##
-			      element python {
-				  python_code
-			      }
-			  )
-		      }|
-		      ## Dump period, in timesteps.
-		      element dump_period_in_timesteps {
-			  (
-			      element constant {
-				  integer
-			      }|
-			      ## Python function prescribing integer input. Functions should be of the form:
-			      ##
-			      ##  def val(t):
-			      ##     # Function code
-			      ##     return # Return value
-			      ##
-			      element python {
-				  python_code
-			      }
-			  )
-		      }
-		  )?,
-		  # every CPUDUM seconds write results to disc.
-		  ## This is usually disabled.
-		  element cpu_dump_period {
-		      real
-		  }?,
-		  ## The period between dumps in walltime seconds. This is usually disabled.
-		  element wall_time_dump_period {
-		      real
-		  }?,
+		  element particle_io {
+		      (
+                          ## Period between dumps in time units.
+                          element dump_period {
+                              (
+                                  element constant {
+                                      real
+                                  }|
+                                  ## Python function prescribing real input. Functions should be of the form:
+                                  ##
+                                  ##  def val(t):
+                                  ##     # Function code
+                                  ##     return # Return value
+                                  ##
+                                  element python {
+                                      python_code
+                                  }
+                              )
+                          }|
+                          ## Dump period, in timesteps.
+                          element dump_period_in_timesteps {
+                              (
+                                  element constant {
+                                      integer
+                                  }|
+                                  ## Python function prescribing integer input. Functions should be of the form:
+                                  ##
+                                  ##  def val(t):
+                                  ##     # Function code
+                                  ##     return # Return value
+                                  ##
+                                  element python {
+                                      python_code
+                                  }
+                              )
+                          }
+                      )?,
+                      # every CPUDUM seconds write results to disc.
+                      ## This is usually disabled.
+                      element cpu_dump_period {
+                          real
+                      }?,
+                      ## The period between dumps in walltime seconds. This is usually disabled.
+                      element wall_time_dump_period {
+                          real
+                      }?
+                  }?,
                   ## Particle subgroups arrays specified within a particle group. All subgroups utilize the same velocity field
                   ## and carry the same attributes. Subgroups can have different initial positions specified via a python
                   ## function of from a file.
