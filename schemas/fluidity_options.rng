@@ -246,23 +246,9 @@ checkpoints may be overwritten.</a:documentation>
                   <attribute name="name">
                     <data type="string"/>
                   </attribute>
-                  <choice>
-                    <element name="location">
-                      <ref name="real_dim_vector"/>
-                    </element>
-                    <element name="from_checkpoint_file">
-                      <a:documentation>File containing the detectors positions in binary form</a:documentation>
-                      <attribute name="file_name">
-                        <data type="string"/>
-                      </attribute>
-                      <element name="format">
-                        <a:documentation>The format of the input file containing field data.</a:documentation>
-                        <element name="string_value">
-                          <value>binary</value>
-                        </element>
-                      </element>
-                    </element>
-                  </choice>
+                  <element name="location">
+                    <ref name="real_dim_vector"/>
+                  </element>
                 </element>
                 <element name="detector_array">
                   <a:documentation>Detectors with their locations specified via a python function or from a file. Allows detector arrays to be added.</a:documentation>
@@ -304,46 +290,15 @@ The t argument is for future use only - currently detector locations are only se
                         </element>
                       </element>
                     </element>
-                    <element name="from_checkpoint_file">
-                      <a:documentation>File containing the detectors positions in binary form</a:documentation>
-                      <attribute name="file_name">
-                        <data type="string"/>
-                      </attribute>
-                      <element name="format">
-                        <a:documentation>The format of the input file containing field data.</a:documentation>
-                        <element name="string_value">
-                          <value>binary</value>
-                        </element>
-                      </element>
-                    </element>
                   </choice>
                 </element>
               </choice>
             </zeroOrMore>
-            <choice>
-              <element name="fail_outside_domain">
-                <a:documentation>By default Fluidity will fail if a detector has left the domain.</a:documentation>
-                <empty/>
-              </element>
-              <element name="write_nan_outside_domain">
-                <a:documentation>Enable to write NaN values to detector output if a detector has left the domain.</a:documentation>
-                <empty/>
-              </element>
-            </choice>
-            <optional>
-              <element name="ascii_output">
-                <a:documentation>Enable to write detector output in ascii format. This output format will not work in parallel, if not enabled format defaults to binary.</a:documentation>
-                <ref name="comment"/>
-              </element>
-            </optional>
             <optional>
               <element name="move_with_mesh">
                 <a:documentation>Enable to let detectors move with the domain if mesh_movement is enabled.</a:documentation>
                 <empty/>
               </element>
-            </optional>
-            <optional>
-              <ref name="lagrangian_timestepping"/>
             </optional>
           </element>
         </optional>
