@@ -79,7 +79,7 @@
         <attributes>
           <attribute name="field">
             <python_fields>
-              <string_value type="code" language="python" lines="20">def val(X, t, fields):
+              <string_value type="code" language="python" lines="20">def val(X, t, dt, fields):
   return fields["Field"]</string_value>
             </python_fields>
           </attribute>
