@@ -20,7 +20,9 @@ z = stat_parser("particle_attributes.stat")
 dt_errors = np.zeros(10,float)
 
 for i in range(10):
-    dt_errors[i] =  f[f'/Step#{i}/DtVal'][:]- z['dt']['value'][i+1]
+    d = f['/Step#{}'.format(len(f)-(10-i))]
+    val = d['DtVal'][:]
+    dt_errors[i] =  val- z['dt']['value'][i+1]
 dt_error=abs(dt_errors).max()
 print ("max error",dt_error)
     </variable>
@@ -34,7 +36,9 @@ z = stat_parser("particle_attributes.stat")
 dt_change_errors = np.zeros(9,float)
 
 for i in range(1,10):
-    dt_change_errors[i-1] = f[f'/Step#{i}/Dtchange'][:] - (z['dt']['value'][i+1] - z['dt']['value'][i])
+    d = f['/Step#{}'.format(len(f)-(10-i))]
+    val2 = d['Dtchange'][:]
+    dt_change_errors[i-1] = val2 - (z['dt']['value'][i+1] - z['dt']['value'][i])
 dt_change_error=abs(dt_change_errors).max()
 print ("max error",dt_change_error)
     </variable>
