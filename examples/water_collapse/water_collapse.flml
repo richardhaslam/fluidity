@@ -77,7 +77,6 @@
           <real_value rank="1" dim1="dim" shape="2">3.22 1.0</real_value>
         </location>
       </static_detector>
-      <fail_outside_domain/>
     </detectors>
   </io>
   <timestepping>

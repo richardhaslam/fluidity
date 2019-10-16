@@ -54,7 +54,6 @@
   </io>
   <particles>
     <particle_group name="Rhodri">
-      <velocity_field name="Velocity"/>
       <particle_subgroup name="Thomas">
         <number_of_particles>
           <integer_value rank="0">60</integer_value>
@@ -126,13 +125,12 @@
       </particle_subgroup>
     </particle_group>
     <particle_group name="Cian">
-      <velocity_field name="Velocity"/>
       <particle_io>
         <dump_period_in_timesteps>
           <constant>
             <integer_value rank="0">20</integer_value>
           </constant>
-	</dump_period_in_timesteps>
+        </dump_period_in_timesteps>
       </particle_io>
       <particle_subgroup name="Steph">
         <number_of_particles>

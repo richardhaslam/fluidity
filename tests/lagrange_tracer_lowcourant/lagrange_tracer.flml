@@ -64,7 +64,6 @@
   </io>
   <particles>
     <particle_group name="Particles">
-      <velocity_field name="Velocity"/>
       <particle_subgroup name="SingleParticle">
         <number_of_particles>
           <integer_value rank="0">1</integer_value>
