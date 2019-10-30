@@ -49,6 +49,7 @@ module detector_data_types
 
   type attr_names_type
     character(len=FIELD_NAME_LEN), dimension(:), allocatable :: s, v, t
+    integer, dimension(:), allocatable :: sn, vn, tn
   end type attr_names_type
 
   type field_phase_type

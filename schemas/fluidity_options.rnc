@@ -371,16 +371,40 @@ start =
                                  attribute name { xsd:string },
                                  generic_scalar_particle_attribute_choice
 			      }|
+			      ##Scalar particle attribute array.
+			      element scalar_attribute_array {
+                                 attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
+                                 generic_scalar_particle_attribute_choice
+			      }|
 			      ##Vector particle attribute.
 			      element vector_attribute {
                                  attribute name { xsd:string },
+                                 generic_vector_particle_attribute_choice
+			      }|
+			      ##Vector particle attribute array.
+			      element vector_attribute_array {
+                                 attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
                                  generic_vector_particle_attribute_choice
 			      }|
 			      ##Tensor particle attribute.
 			      element tensor_attribute {
                                  attribute name { xsd:string },
                                  generic_tensor_particle_attribute_choice
-		              }
+		              }|
+			      ##Tensor particle attribute array.
+			      element tensor_attribute_array {
+                                 attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
+                                 generic_tensor_particle_attribute_choice
+			      }
 			   )+
                         }?
                      )
