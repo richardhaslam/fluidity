@@ -280,6 +280,10 @@ start =
                element particle_group {
                   attribute name { xsd:string },
 		  element particle_io {
+		      ## Do not output this particle group to file
+		      element exclude_from_output {
+			  empty
+		      }?,
 		      (
                           ## Period between dumps in time units.
                           element dump_period {

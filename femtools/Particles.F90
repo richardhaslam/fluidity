@@ -377,7 +377,7 @@ contains
             end if
           end if
 
-          if (do_output) then
+          if (do_output .and. .not. have_option(trim(group_path)//"/particle_io/exclude_from_output")) then
             ! Only set up output if we need to (i.e. actually running,
             ! not flredecomping)
             call set_particle_output_file(subname, filename, &
@@ -1718,7 +1718,7 @@ contains
       ! gracefully clean up output files
       particle_groups = size(particle_lists)
       do i = 1, particle_groups
-        h5_ierror = h5_closefile(particle_lists(i)%h5_id)
+        if (particle_lists(i)%h5_id /= -1) h5_ierror = h5_closefile(particle_lists(i)%h5_id)
       enddo
 
       ! Deallocate all particle arrays (detector lists)

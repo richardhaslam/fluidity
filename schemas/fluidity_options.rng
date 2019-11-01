@@ -345,6 +345,12 @@ and deleting options.</a:documentation>
                 <optional>
                   <element name="particle_io">
                     <optional>
+                      <element name="exclude_from_output">
+                        <a:documentation>Do not output this particle group to file</a:documentation>
+                        <empty/>
+                      </element>
+                    </optional>
+                    <optional>
                       <choice>
                         <element name="dump_period">
                           <a:documentation>Period between dumps in time units.</a:documentation>
