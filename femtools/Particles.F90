@@ -674,7 +674,7 @@ contains
     character(len=OPTION_PATH_LEN) :: particles_cp_filename
     character(len=FIELD_NAME_LEN) :: particle_name, fmt
     integer(kind=8) :: h5_ierror, h5_id, h5_prop, view_start, view_end ! h5hut state
-    integer(kind=8), dimension(:), allocatable :: npoints ! number of points for each rank to read
+    integer(kind=8), dimension(:), allocatable :: npoints, part_counter ! number of points for each rank to read
     type(attr_vals_type), pointer :: attr_vals, old_attr_vals, old_field_vals ! scalar/vector/tensor arrays
 
     ewrite(2,*) "Reading particles from file"
@@ -716,7 +716,9 @@ contains
     call mpi_comm_size(MPI_COMM_FEMTOOLS, commsize, ierr)
     call mpi_comm_rank(MPI_COMM_FEMTOOLS, rank, ierr)
     allocate(npoints(commsize))
+    allocate(part_counter(commsize))
     h5_ierror = h5_readfileattrib_i8(h5_id, "npoints", npoints)
+    h5_ierror = h5_readfileattrib_i8(h5_id, "part_counter", part_counter)
     h5_ierror = h5pt_setnpoints(h5_id, npoints(rank+1))
 
     ! figure out our local offset into the file
@@ -749,10 +751,14 @@ contains
            attr_counts, attr_vals, old_attr_vals, old_field_vals, global=.false.)
     end do
 
+    ! reset proc_particle_count
+    p_list%proc_part_count = part_counter(rank+1)
+
     h5_ierror = h5_closefile(h5_id)
 
     deallocate(positions)
     deallocate(npoints)
+    deallocate(part_counter)
 
     deallocate(attr_vals)
     deallocate(old_attr_vals)
@@ -1642,10 +1648,13 @@ contains
     ! we store the number of points per process, so gather them
     ! this is because h5part attributes must be agreed upon by all,
     ! so every process needs to know the size for every other process
+    ! we also store the proc_part_count to ensure newly spawned
+    ! particles after checkpointing remain unique
     call mpi_comm_size(comm, commsize, ierr)
-    allocate(npoints(commsize))
-    call mpi_allgather([int(particle_list%length, 8)], 1, MPI_INTEGER8, &
-         npoints, 1, MPI_INTEGER8, comm, ierr)
+    allocate(npoints(commsize*2))
+    call mpi_allgather([int(particle_list%length, 8), int(particle_list%proc_part_count, 8)], &
+         2, MPI_INTEGER8, &
+         npoints, 2, MPI_INTEGER8, comm, ierr)
 
     ! construct a new particle checkpoint filename
     particles_cp_filename = trim(prefix)
@@ -1661,7 +1670,9 @@ contains
     h5_id = h5_openfile(trim(particles_cp_filename), H5_O_WRONLY, h5_prop)
     h5_ierror = h5_closeprop(h5_prop)
     ! write out number of points per process
-    h5_ierror = h5_writefileattrib_i8(h5_id, "npoints", npoints, int(commsize, 8))
+    h5_ierror = h5_writefileattrib_i8(h5_id, "npoints", npoints(1::2), int(commsize, 8))
+    ! write out per-processor particle count, for unique spawning
+    h5_ierror = h5_writefileattrib_i8(h5_id, "part_counter", npoints(2::2), int(commsize, 8))
     ! write data in the first step
     h5_ierror = h5_setstep(h5_id, int(1, 8))
     ! the number of points this process is writing
