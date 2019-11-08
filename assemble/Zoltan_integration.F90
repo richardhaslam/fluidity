@@ -2053,7 +2053,7 @@ module zoltan_integration
     integer :: old_local_element_number, new_local_element_number, old_universal_element_number
     integer, allocatable :: ndets_being_sent(:)
     real, allocatable :: send_buff(:,:), recv_buff(:,:)
-    logical do_broadcast
+    logical :: do_broadcast, sent
     integer, dimension(3) :: attribute_size
     integer :: total_attributes
     type(element_type), pointer :: shape
@@ -2075,7 +2075,6 @@ module zoltan_integration
              attribute_size(1)=size(detector%attributes)
              attribute_size(2)=size(detector%old_attributes)
              attribute_size(3)=size(detector%old_fields)
-             total_attributes=sum(attribute_size)
           end if
        end if
        do while (associated(detector))
@@ -2123,6 +2122,17 @@ module zoltan_integration
           deallocate(ndets_being_sent)
           cycle
        end if
+       i=1
+       sent=.false.
+       do while (sent.eqv..false.)
+          if (ndets_being_sent(i)>0) then
+             call mpi_bcast(attribute_size, 3, getPINTEGER(), i-1, MPI_COMM_FEMTOOLS, ierr)
+             assert(ierr == MPI_SUCCESS)
+             total_attributes=sum(attribute_size)
+             sent=.true.
+          end if
+          i=i+1
+       end do
        ewrite(2,*) "Broadcast required, initialising..."
        
        ! Allocate memory for all the particles you're going to send
@@ -2150,7 +2160,7 @@ module zoltan_integration
                 
                 ! Receive broadcast
                 ewrite(2,*) "Receiving ", ndets_being_sent(i), " particles from process ", i
-                call mpi_bcast(recv_buff,ndets_being_sent(i)*(zoltan_global_ndata_per_det*total_attributes), getPREAL(), i-1, MPI_COMM_FEMTOOLS, ierr)
+                call mpi_bcast(recv_buff,ndets_being_sent(i)*(zoltan_global_ndata_per_det+total_attributes), getPREAL(), i-1, MPI_COMM_FEMTOOLS, ierr)
                 assert(ierr == MPI_SUCCESS)
                 
                 ! Unpack particle if you own it
@@ -2159,12 +2169,13 @@ module zoltan_integration
                    ! Allocate and unpack the particle
                    shape=>ele_shape(zoltan_global_new_positions,1)                     
                    call allocate(detector, zoltan_global_ndims, local_coord_count(shape), attribute_size)
-                   call unpack_detector(detector, recv_buff(j, 1:zoltan_global_ndata_per_det+total_attributes), zoltan_global_ndims, attribute_size=attribute_size)
+                   call unpack_detector(detector, recv_buff(k, 1:zoltan_global_ndata_per_det+total_attributes), zoltan_global_ndims, attribute_size=attribute_size)
                    
                    if (has_key(zoltan_global_uen_to_new_local_numbering, detector%element)) then 
                       new_local_element_number = fetch(zoltan_global_uen_to_new_local_numbering, detector%element)
                       if (element_owned(zoltan_global_new_positions%mesh, new_local_element_number)) then
                          detector%element = new_local_element_number
+                         call picker_inquire(zoltan_global_new_positions, detector%position, detector%element, detector%local_coords, global=.false.)
                          call insert(detector, detector_list_array(detector%list_id)%ptr)
                          detector => null()
                       else
@@ -2312,12 +2323,7 @@ module zoltan_integration
        add_detector => detector
        detector => detector%next
 
-       ! update detector name if names are present on the list, otherwise det%name=id_number
-       if (allocated(detector_list_array(add_detector%list_id)%ptr%detector_names)) then
-          add_detector%name=detector_list_array(add_detector%list_id)%ptr%detector_names(add_detector%id_number)
-       else
-          add_detector%name=int2str(add_detector%id_number)
-       end if
+       add_detector%name=int2str(add_detector%id_number)
 
        ! move detector to the correct list
        call move(add_detector, zoltan_global_unpacked_detectors_list, detector_list_array(add_detector%list_id)%ptr)

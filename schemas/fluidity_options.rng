@@ -342,63 +342,100 @@ and deleting options.</a:documentation>
                 <attribute name="name">
                   <data type="string"/>
                 </attribute>
-                <optional>
-                  <element name="particle_io">
-                    <optional>
-                      <element name="exclude_from_output">
-                        <a:documentation>Do not output this particle group to file</a:documentation>
-                        <empty/>
+                <element name="particle_io">
+                  <optional>
+                    <element name="exclude_from_output">
+                      <a:documentation>Do not output this particle group to file</a:documentation>
+                      <empty/>
+                    </element>
+                  </optional>
+                  <optional>
+                    <choice>
+                      <element name="dump_period">
+                        <a:documentation>Period between dumps in time units.</a:documentation>
+                        <choice>
+                          <element name="constant">
+                            <ref name="real"/>
+                          </element>
+                          <element name="python">
+                            <a:documentation>Python function prescribing real input. Functions should be of the form:
+
+ def val(t):
+    # Function code
+    return # Return value
+</a:documentation>
+                            <ref name="python_code"/>
+                          </element>
+                        </choice>
                       </element>
-                    </optional>
-                    <optional>
+                      <element name="dump_period_in_timesteps">
+                        <a:documentation>Dump period, in timesteps.</a:documentation>
+                        <choice>
+                          <element name="constant">
+                            <ref name="integer"/>
+                          </element>
+                          <element name="python">
+                            <a:documentation>Python function prescribing integer input. Functions should be of the form:
+
+ def val(t):
+    # Function code
+    return # Return value
+</a:documentation>
+                            <ref name="python_code"/>
+                          </element>
+                        </choice>
+                      </element>
+                    </choice>
+                  </optional>
+                  <optional>
+                    <!-- every CPUDUM seconds write results to disc. -->
+                    <element name="cpu_dump_period">
+                      <a:documentation>This is usually disabled.</a:documentation>
+                      <ref name="real"/>
+                    </element>
+                  </optional>
+                  <optional>
+                    <element name="wall_time_dump_period">
+                      <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
+                      <ref name="real"/>
+                    </element>
+                  </optional>
+                </element>
+                <optional>
+                  <element name="particle_spawning">
+                    <a:documentation>Options for spawning and deleting particles based on the minimum and maximum limits of particles per control volume. Defined per particle_group.</a:documentation>
+                    <ref name="mesh_choice">
+                      <a:documentation>Set the mesh which will be used for particle spawning. Currently only works for a P1CV mesh!</a:documentation>
+                    </ref>
+                    <element name="min_cv_threshhold">
+                      <a:documentation>Minimum number of particles per control volume.</a:documentation>
+                      <ref name="integer"/>
+                    </element>
+                    <element name="max_cv_threshhold">
+                      <a:documentation>Maximum number of particles per control volume (recommended to be at least four times the minimum threshold).</a:documentation>
+                      <ref name="integer"/>
+                    </element>
+                    <element name="spawn_location">
+                      <a:documentation>Options for setting where particles will be spawned within the control volume</a:documentation>
                       <choice>
-                        <element name="dump_period">
-                          <a:documentation>Period between dumps in time units.</a:documentation>
-                          <choice>
-                            <element name="constant">
-                              <ref name="real"/>
-                            </element>
-                            <element name="python">
-                              <a:documentation>Python function prescribing real input. Functions should be of the form:
-
- def val(t):
-    # Function code
-    return # Return value
-</a:documentation>
-                              <ref name="python_code"/>
-                            </element>
-                          </choice>
+                        <element name="radius">
+                          <a:documentation>Particles will spawn within a radius of the parent particle (ensuring they remain within the current element and control volume).
+Value is in local coordinates (recommended value 0.05).</a:documentation>
+                          <ref name="real"/>
                         </element>
-                        <element name="dump_period_in_timesteps">
-                          <a:documentation>Dump period, in timesteps.</a:documentation>
-                          <choice>
-                            <element name="constant">
-                              <ref name="integer"/>
-                            </element>
-                            <element name="python">
-                              <a:documentation>Python function prescribing integer input. Functions should be of the form:
-
- def val(t):
-    # Function code
-    return # Return value
-</a:documentation>
-                              <ref name="python_code"/>
-                            </element>
-                          </choice>
+                        <element name="random">
+                          <a:documentation>Particles will spawn randomly within the control volume.</a:documentation>
+                          <empty/>
                         </element>
                       </choice>
-                    </optional>
+                    </element>
                     <optional>
-                      <!-- every CPUDUM seconds write results to disc. -->
-                      <element name="cpu_dump_period">
-                        <a:documentation>This is usually disabled.</a:documentation>
-                        <ref name="real"/>
-                      </element>
-                    </optional>
-                    <optional>
-                      <element name="wall_time_dump_period">
-                        <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
-                        <ref name="real"/>
+                      <element name="subgroup_spawning_caps">
+                        <a:documentation>Option to set spawning caps for specific particle subgroups if one is dominant in a control volume.</a:documentation>
+                        <element name="percentage">
+                          <a:documentation>Percentage of single subgroup required to be present for only that subgroup to spawn within a specific control volume.</a:documentation>
+                          <ref name="real"/>
+                        </element>
                       </element>
                     </optional>
                   </element>
@@ -505,16 +542,13 @@ The t argument is for future use only - currently particle locations are only se
               </element>
             </oneOrMore>
           </zeroOrMore>
-          <choice>
-            <element name="fail_outside_domain">
-              <a:documentation>By default Fluidity will fail if a particle has left the domain.</a:documentation>
+          <element name="moving_outside_domain">
+            <a:documentation>Options for particles being advected outside the computational domain.</a:documentation>
+            <element name="delete">
+              <a:documentation>By default Fluidity will delete particles if they move outside the domain.</a:documentation>
               <empty/>
             </element>
-            <element name="write_nan_outside_domain">
-              <a:documentation>Enable to write NaN values to particle output if a particle has left the domain.</a:documentation>
-              <empty/>
-            </element>
-          </choice>
+          </element>
           <optional>
             <element name="move_with_mesh">
               <a:documentation>Enable to let particles move with the domain if mesh_movement is enabled.</a:documentation>
