@@ -938,12 +938,13 @@ contains
     type(detector_linked_list), intent(in) :: p_list
 
     type(detector_type), pointer :: particle
+    character(len=OPTION_PATH_LEN) :: attr_key
     
     real, allocatable, dimension(:,:) :: attribute_array
     real :: constant
     real, allocatable, dimension(:) :: vconstant
     real, allocatable, dimension(:,:) :: tconstant
-    integer :: j, nparticles, n, i_single, attr_idx
+    integer :: i, j, nparticles, n, i_single, attr_idx, dim
     integer :: nscalar, nvector, ntensor
 
     !Check if this processor contains particles
@@ -1184,7 +1185,7 @@ contains
     ntensor = size(p_list%attr_names%t)
 
     ! return if no attributes
-    if (sum(nscalar+nvector+ntensor) == 0) then
+    if (nscalar+nvector+ntensor== 0) then
        return
     end if
 
