@@ -404,7 +404,7 @@ contains
     integer :: neigh, proc_local_number, deleted_detectors
     logical :: make_delete
 
-    make_delete=have_option("/particles/moving_outside_domain/delete")
+    !make_delete=have_option("/particles/moving_outside_domain/delete") !have delete on by default
     deleted_detectors=0
     
     !Loop over all the detectors
@@ -441,10 +441,11 @@ contains
                    !this face goes outside of the computational domain
                    !try all of the faces with negative local coordinate
                    !just in case we went through a corner
+                   make_delete=.true.
                    face_search: do neigh = 1, size(arrival_local_coords)
                       if (arrival_local_coords(neigh)<-search_tolerance.and.neigh_list(neigh)>0) then
-                         det0%element = neigh_list(neigh)
                          make_delete = .false.
+                         det0%element = neigh_list(neigh)
                          exit face_search
                       end if
                    end do face_search
@@ -488,7 +489,6 @@ contains
     end do
     call allsum(deleted_detectors)
     detector_list%total_num_det = detector_list%total_num_det-deleted_detectors
-    
   end subroutine move_detectors_guided_search
 
 end module detector_move_lagrangian
