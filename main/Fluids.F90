@@ -746,7 +746,7 @@ contains
        call move_particles(state, dt, timestep)
        call particle_cv_check(state)
        call update_particle_diagnostics(state, current_time, dt)
-       !call write_particles_loop(state, current_time, dt) !Currently removed until particle IO is revamped
+       call write_particles_loop(state, timestep, current_time)
        
        ! calculate and write diagnostics before the timestep gets changed
        call calculate_diagnostic_variables(State, exclude_nonrecalculated=.true.)
