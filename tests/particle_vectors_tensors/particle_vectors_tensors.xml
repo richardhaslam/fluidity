@@ -11,14 +11,28 @@ mpiexec ../../bin/fluidity -v3 -l particle-vectors-tensors-flredecomp.flml
     </command_line>
   </problem_definition>
   <variables>
+    <variable name="scalar_error_1" language="python">
+import numpy as np
+import h5py
+
+f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
+d = f['/Step#{}'.format(len(f)-1)]
+idx = np.argsort(d['id'])
+att_1 = d['ScalPos1'][:]
+pos = d['x'][:] + d['y'][:]
+scal_error = np.sqrt((att_1 - pos)**2)
+scalar_error_1=abs(scal_error).max()
+
+print ("max error",scalar_error_1)
+    </variable>
     <variable name="vector_error_1" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
-n = len(f)-1
-att_1 = f[f'/Step#{n}/FullVec1_0'][:]
-att_2 = f[f'/Step#{n}/FullVec1_1'][:]
+d = f['/Step#{}'.format(len(f)-1)]
+att_1 = d['FullVec1_0'][:]
+att_2 = d['FullVec1_1'][:]
 vec_error = np.sqrt((att_1 - 1.0)**2+(att_2-2.0)**2)
 vector_error_1=abs(vec_error).max()
 
@@ -29,9 +43,9 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
-n = len(f)-1
-att_1 = f[f'/Step#{n}/FullVec2_0'][:]
-att_2 = f[f'/Step#{n}/FullVec2_1'][:]
+d = f['/Step#{}'.format(len(f)-1)]
+att_1 = d['FullVec2_0'][:]
+att_2 = d['FullVec2_1'][:]
 vec_error = np.sqrt((att_1 - 0.0)**2+(att_2-1.0)**2)
 vector_error_2=abs(vec_error).max()
 
@@ -42,9 +56,9 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
-n = len(f)-1
-att_1 = f[f'/Step#{n}/FullVec3_0'][:]
-att_2 = f[f'/Step#{n}/FullVec3_1'][:]
+d = f['/Step#{}'.format(len(f)-1)]
+att_1 = d['FullVec3_0'][:]
+att_2 = d['FullVec3_1'][:]
 vec_error = np.sqrt((att_1 - 1.0)**2+(att_2-2.0)**2)
 vector_error_3=abs(vec_error).max()
 
@@ -55,11 +69,11 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
-n = len(f)-1
-att_1 = f[f'/Step#{n}/FullTens_0'][:]
-att_2 = f[f'/Step#{n}/FullTens_1'][:]
-att_3 = f[f'/Step#{n}/FullTens_2'][:]
-att_4 = f[f'/Step#{n}/FullTens_3'][:]
+d = f['/Step#{}'.format(len(f)-1)]
+att_1 = d['FullTens_0'][:]
+att_2 = d['FullTens_1'][:]
+att_3 = d['FullTens_2'][:]
+att_4 = d['FullTens_3'][:]
 ten_error = np.sqrt((att_1 - 1.0)**2+(att_2 - 2.0)**2+(att_3 - 3.0)**2+(att_4 - 4.0)**2)
 tensor_error_1=abs(ten_error).max()
 
@@ -70,11 +84,11 @@ import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.PosMeasure.h5part', 'r')
-n = len(f)-1
-att_1 = f[f'/Step#{n}/FullTens2_0'][:]
-att_2 = f[f'/Step#{n}/FullTens2_1'][:]
-att_3 = f[f'/Step#{n}/FullTens2_2'][:]
-att_4 = f[f'/Step#{n}/FullTens2_3'][:]
+d = f['/Step#{}'.format(len(f)-1)]
+att_1 = d['FullTens2_0'][:]
+att_2 = d['FullTens2_1'][:]
+att_3 = d['FullTens2_2'][:]
+att_4 = d['FullTens2_3'][:]
 ten_error = np.sqrt((att_1 - 1.0)**2+(att_2 - 2.0)**2+(att_3 - 3.0)**2+(att_4 - 4.0)**2)
 tensor_error_2=abs(ten_error).max()
 
@@ -90,6 +104,9 @@ print ("Total wall time", Walltime)
     </variable>
   </variables>
   <pass_tests>
+    <test name="Maxscalarerror1" language="python">
+assert abs(scalar_error_1).max() &lt; 1.0e-5
+    </test>
     <test name="Maxvectorerror1" language="python">
 assert abs(vector_error_1).max() &lt; 1.0e-5
     </test>

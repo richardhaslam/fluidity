@@ -1288,7 +1288,9 @@ contains
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', vconstant)
         ! broadcast vector constant out to all particles
-        attribute_array(attr_idx:attr_idx+n*dim-1,:) = spread(vconstant, 2, nparticles)
+        do j = 1,n
+           attribute_array(attr_idx+((j-1)*dim):attr_idx+j*dim-1,:) = spread(vconstant, 2, nparticles)
+        end do
 
       else if (have_option(trim(attr_key)//'/python')) then
         call get_option(trim(attr_key)//'/python', func)
@@ -1334,7 +1336,9 @@ contains
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', tconstant)
         ! flatten tensor, then broadcast out to all particles
-        attribute_array(attr_idx:attr_idx+n*dim**2-1,:) = spread(reshape(tconstant, [dim**2]), 2, nparticles)
+        do j = 1,n
+           attribute_array(attr_idx+((j-1)*dim**2):attr_idx+j*dim**2-1,:) = spread(reshape(tconstant, [dim**2]), 2, nparticles)
+        end do
 
        else if (have_option(trim(attr_key)//'/python')) then
          call get_option(trim(attr_key)//'/python', func)
