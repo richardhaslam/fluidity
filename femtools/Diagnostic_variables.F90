@@ -79,11 +79,10 @@ module diagnostic_variables
   use mixing_statistics
   use detector_tools
   use detector_parallel
+  use h5hut
   use particles, only: get_particle_arrays
   use state_fields_module
-
-  use H5hut
-
+  
   implicit none
 
   interface
