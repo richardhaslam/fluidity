@@ -663,6 +663,7 @@ contains
     integer :: i
     integer :: ierr, str_size, commsize, rank, id(1), proc_id(1)
     integer :: input_comm, world_group, input_group ! opaque MPI pointers
+    integer :: particle_number
     real, allocatable, dimension(:) :: positions ! particle coordinates
     character(len=OPTION_PATH_LEN) :: particles_cp_filename
     character(len=FIELD_NAME_LEN) :: particle_name, fmt
@@ -717,6 +718,7 @@ contains
     ! figure out our local offset into the file
     h5_ierror = h5pt_getview(h5_id, view_start, view_end)
 
+    particle_number = 1
     do i = 1, npoints(rank+1)
       write(particle_name, fmt) trim(subgroup_name)//"_", i
 
@@ -741,7 +743,8 @@ contains
       ! don't use a global check for this particle
       call create_single_particle(p_list, xfield, &
            positions, id(1), proc_id(1), trim(particle_name), dim, &
-           attr_counts, attr_vals, old_attr_vals, old_field_vals, global=.false.)
+           attr_counts, attr_vals, old_attr_vals, old_field_vals, global=.false., particle_number=particle_number)
+      particle_number = particle_number + 1
     end do
 
     ! reset proc_particle_count
@@ -778,7 +781,7 @@ contains
   !> Allocate a single particle, populate and insert it into the given list
   !! In parallel, first check if the particle would be local and only allocate if it is
   subroutine create_single_particle(detector_list, xfield, position, id, proc_id, name, dim, &
-       attr_counts, attr_vals, old_attr_vals, old_field_vals, global)
+       attr_counts, attr_vals, old_attr_vals, old_field_vals, global, particle_number)
     !> The detector list to hold the particle
     type(detector_linked_list), intent(inout) :: detector_list
     !> Coordinate vector field
@@ -800,6 +803,8 @@ contains
     type(attr_vals_type), intent(in), optional :: attr_vals, old_attr_vals, old_field_vals
     !> Whether to use a global query for the element owning this particle
     logical, intent(in), optional :: global
+    !> Dummy counter for particle number. Removes issues when reading from checkpoint with spawning/deleting
+    integer, intent(in), optional :: particle_number
 
     type(detector_type), pointer :: detector
     type(element_type), pointer :: shape
@@ -814,7 +819,11 @@ contains
     shape => ele_shape(xfield,1)
     assert(xfield%dim+1==local_coord_count(shape))
 
-    detector_list%detector_names(id) = name
+    if (present(particle_number)) then
+       detector_list%detector_names(particle_number) = name
+    else
+       detector_list%detector_names(id) = name
+    end if
     ! Determine element and local_coords from position
     call picker_inquire(xfield, position, element, local_coord=lcoords, global=picker_global)
     call get_option("/timestepping/timestep", dt)
