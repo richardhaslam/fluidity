@@ -420,7 +420,7 @@ and deleting options.</a:documentation>
                       <choice>
                         <element name="radius">
                           <a:documentation>Particles will spawn within a radius of the parent particle (ensuring they remain within the current element and control volume).
-Value is in local coordinates (recommended value 0.05).</a:documentation>
+Value is in local coordinates (recommended value 0.1).</a:documentation>
                           <ref name="real"/>
                         </element>
                         <element name="random">

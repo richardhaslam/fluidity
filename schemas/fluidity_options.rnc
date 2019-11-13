@@ -345,7 +345,7 @@ start =
 		     ## Options for setting where particles will be spawned within the control volume
 		     element spawn_location {
 	                ## Particles will spawn within a radius of the parent particle (ensuring they remain within the current element and control volume).
-			## Value is in local coordinates (recommended value 0.05).
+			## Value is in local coordinates (recommended value 0.1).
 	                element radius {
 			   real
 	                }|
