@@ -146,6 +146,7 @@ contains
     integer :: s_oldfield, v_oldfield, t_oldfield
     integer, dimension(3) :: field_counts, old_field_counts
     type(attr_names_type) :: attr_names, old_attr_names, field_names, old_field_names
+    type(attr_write_type) :: attr_write
     type(attr_counts_type) :: attr_counts
     type(field_phase_type) :: field_phases, old_field_phases
 
@@ -308,19 +309,20 @@ contains
 
           ! Find number of attributes, old attributes, and names of each
           call attr_names_and_count(trim(subgroup_path) // "/attributes/scalar_attribute", &
-               attr_names%s, old_attr_names%s, attr_names%sn, old_attr_names%sn, &
+               attr_names%s, old_attr_names%s, attr_names%sn, old_attr_names%sn, attr_write%s, &
                attr_counts%attrs(1), attr_counts%old_attrs(1))
           call attr_names_and_count(trim(subgroup_path) // "/attributes/vector_attribute", &
-               attr_names%v, old_attr_names%v, attr_names%vn, old_attr_names%vn, &
+               attr_names%v, old_attr_names%v, attr_names%vn, old_attr_names%vn, attr_write%v, &
                attr_counts%attrs(2), attr_counts%old_attrs(2))
           call attr_names_and_count(trim(subgroup_path) // "/attributes/tensor_attribute", &
-               attr_names%t, old_attr_names%t, attr_names%tn, old_attr_names%tn, &
+               attr_names%t, old_attr_names%t, attr_names%tn, old_attr_names%tn, attr_write%t, &
                attr_counts%attrs(3), attr_counts%old_attrs(3))
 
           ! save names in the detector list -- this will allocate and assign values
           ! as expected
           particle_lists(list_counter)%attr_names = attr_names
           particle_lists(list_counter)%old_attr_names = old_attr_names
+          particle_lists(list_counter)%attr_write = attr_write
 
           ! If any attributes are from fields, we'll need to store old fields too
           store_old_fields = .false.
@@ -380,7 +382,7 @@ contains
             end if
           end if
 
-          if (do_output .and. .not. have_option(trim(group_path)//"/particle_io/exclude_from_output")) then
+          if (do_output) then
             ! Only set up output if we need to (i.e. actually running,
             ! not flredecomping)
             call set_particle_output_file(subname, filename, &
@@ -421,13 +423,15 @@ contains
 
   !> Get the names and count of all attributes and old attributes for
   !! a given attribute rank for a particle subgroup
-  subroutine attr_names_and_count(key, names, old_names, dims, old_dims, count, old_count)
+  subroutine attr_names_and_count(key, names, old_names, dims, old_dims, to_write, count, old_count)
     !> Prefix key to an attribute rank within a subgroup
     character(len=*), intent(in) :: key
     !> Output arrays for attribute names
     character(len=*), dimension(:), allocatable, intent(out) :: names, old_names
     !> Output arrays for attribute dimensions
     integer, dimension(:), allocatable, intent(out) :: dims, old_dims
+    !> Output arrays for whether to write attributes
+    logical, dimension(:), allocatable, intent(out) :: to_write
     !> Output attribute counts
     integer, intent(out) :: count, old_count
 
@@ -447,6 +451,8 @@ contains
     allocate(names(single_count + array_count))
     allocate(old_names(single_old_count + array_old_count))
 
+    allocate(to_write(single_count + array_count))
+
     allocate(dims(single_count + array_count))
     allocate(old_dims(single_old_count + array_old_count))
 
@@ -459,6 +465,8 @@ contains
       ! we set single-valued attributes to have a dimension of 0 to distinguish from
       ! a length 1 array attribute
       dims(i) = 0
+
+      to_write(i) = .not. have_option(trim(subkey)//"/exclude_from_output")
 
       if (have_option(trim(subkey)//"/python_fields/store_old_attribute")) then
         ! prefix with "old_" to distinguish from current attribute
@@ -473,6 +481,8 @@ contains
       write(subkey, "(a,'[',i0,']')") trim(array_key), i-1
       call get_option(trim(subkey)//"/name", names(i+single_count))
       call get_option(trim(subkey)//"/dimension", dims(i+single_count))
+
+      to_write(i+single_count) = .not. have_option(trim(subkey)//"/exclude_from_output")
 
       if (have_option(trim(subkey)//"/python_fields/store_old_attribute")) then
         old_names(old_i) = "Old" // trim(names(i+single_count))
@@ -1572,7 +1582,7 @@ contains
 
     h5_ierror = h5pt_writedata_i4(detector_list%h5_id, "id", node_ids(:))
 
-    call write_attrs(detector_list%h5_id, dim, detector_list%attr_names, attrib_data)
+    call write_attrs(detector_list%h5_id, dim, detector_list%attr_names, attrib_data, to_write=detector_list%attr_write)
 
     deallocate(node_ids)
     deallocate(attrib_data)
@@ -1580,7 +1590,7 @@ contains
   end subroutine write_particles_subgroup
 
   !> Write attributes with given names to an H5Part file
-  subroutine write_attrs(h5_id, dim, names, vals, prefix)
+  subroutine write_attrs(h5_id, dim, names, vals, prefix, to_write)
     !> h5 file to write to
     integer(kind=8), intent(in) :: h5_id
     !> spatial dimension
@@ -1591,26 +1601,38 @@ contains
     real, dimension(:,:), intent(in) :: vals
     !> Optional prefix to attribute names
     character(len=*), intent(in), optional :: prefix
+    !> Optional control of which attributes to write
+    type(attr_write_type), intent(in), optional :: to_write
 
     integer :: i, j, k, att, ii
     integer(kind=8) :: h5_ierror
     character(len=FIELD_NAME_LEN) :: p
+    logical :: write_attr
 
     p = ""
     if (present(prefix)) p = prefix
 
+    write_attr = .true.
+
     ! write out attributes -- scalar, vector, tensor
     att = 1
     scalar_attr_loop: do i = 1, size(names%s)
+      ! booleans aren't short-circuiting, so we have to stack here
+      if (present(to_write)) then
+        write_attr = to_write%s(i)
+      end if
+
       if (names%sn(i) == 0) then
         ! single-valued attribute
-        h5_ierror = h5pt_writedata_r8(h5_id, &
+        if (write_attr) &
+             h5_ierror = h5pt_writedata_r8(h5_id, &
              trim(p)//trim(names%s(i)), vals(:,att))
         att = att + 1
       else
         do ii = 1, names%sn(i)
           ! inner loop for array-valued attribute
-          h5_ierror = h5pt_writedata_r8(h5_id, &
+          if (write_attr) &
+               h5_ierror = h5pt_writedata_r8(h5_id, &
                trim(p)//trim(names%s(i))//int2str(ii), vals(:,att))
           att = att + 1
         end do
@@ -1618,16 +1640,22 @@ contains
     end do scalar_attr_loop
 
     vector_attr_loop: do i = 1, size(names%v)
+      if (present(to_write)) then
+        write_attr = to_write%v(i)
+      end if
+
       if (names%vn(i) == 0) then
         do j = 1, dim
-          h5_ierror = h5pt_writedata_r8(h5_id, &
+          if (write_attr) &
+               h5_ierror = h5pt_writedata_r8(h5_id, &
                trim(p)//trim(names%v(i))//"_"//int2str(j-1), vals(:,att))
           att = att + 1
         end do
       else
         do ii = 1, names%vn(i)
           do j = 1, dim
-            h5_ierror = h5pt_writedata_r8(h5_id, &
+            if (write_attr) &
+                 h5_ierror = h5pt_writedata_r8(h5_id, &
                  trim(p)//trim(names%v(i))//int2str(ii)//"_"//int2str(j-1), vals(:,att))
             att = att + 1
           end do
@@ -1636,10 +1664,15 @@ contains
     end do vector_attr_loop
 
     tensor_attr_loop: do i = 1, size(names%t)
+      if (present(to_write)) then
+        write_attr = to_write%t(i)
+      end if
+
       if (names%tn(i) == 0) then
         do j = 1, dim
           do k = 1, dim
-            h5_ierror = h5pt_writedata_r8(h5_id, &
+            if (write_attr) &
+                 h5_ierror = h5pt_writedata_r8(h5_id, &
                  trim(p)//trim(names%t(i))//"_"//int2str((k-1)*dim + (j-1)), vals(:,att))
             att = att + 1
           end do
@@ -1648,7 +1681,8 @@ contains
         do ii = 1, names%tn(i)
           do j = 1, dim
             do k = 1, dim
-              h5_ierror = h5pt_writedata_r8(h5_id, &
+              if (write_attr) &
+                   h5_ierror = h5pt_writedata_r8(h5_id, &
                    trim(p)//trim(names%t(i))//int2str(ii)//"_"//int2str((k-1)*dim + (j-1)), vals(:,att))
               att = att + 1
             end do
