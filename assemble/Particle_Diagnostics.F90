@@ -1013,7 +1013,8 @@ module particle_diagnostics
     integer :: i, j, k, group_spawn
     integer, dimension(3) :: attribute_size
     integer, dimension(:), allocatable :: remove_particles
-    
+
+    proc_num = getprocno()
     add_particles(:) = 0
 
     !Get ele numbers of adjacent elements
@@ -1066,7 +1067,7 @@ module particle_diagnostics
              if (j/=group_spawn) cycle
           end if
 
-          id = temp_part%id_number
+          id = particle_lists(group_arrays(j))%proc_part_count
           name_len = len(int2str(id+1))+1 !id length + '_'
           tot_len = len(trim(temp_part%name))
           name = trim(temp_part%name(1:tot_len-name_len))
@@ -1086,6 +1087,7 @@ module particle_diagnostics
                 temp_part%name = trim(particle_name)
                 temp_part%id_number = id+1
                 temp_part%list_id = particle%list_id
+                temp_part%proc_id = proc_num
                 temp_part%element=ele_nums(i)
                 !randomly select local coords within the element, ensuring coords are within cv
                 max_lcoord=rand()/(1/0.45)+0.51!lcoords for cv range from 0.51<x<1
@@ -1114,6 +1116,7 @@ module particle_diagnostics
                 
                 add_particles(j) = add_particles(j) + 1
                 id = id + 1
+                particle_lists(group_arrays(j))%proc_part_count = particle_lists(group_arrays(j))%proc_part_count + 1
                 particle => particle%temp_next
              end do
           end do
