@@ -1,5 +1,5 @@
 !    Copyright (C) 2006 Imperial College London and others.
-!    
+!
 !    Please see the AUTHORS file in the main source directory for a full list
 !    of copyright holders.
 !
@@ -9,7 +9,7 @@
 !    Imperial College London
 !
 !    amcgsoftware@imperial.ac.uk
-!    
+!
 !    This library is free software; you can redistribute it and/or
 !    modify it under the terms of the GNU Lesser General Public
 !    License as published by the Free Software Foundation,
@@ -48,7 +48,7 @@ module particle_diagnostics
   use particles, only : get_particle_arrays, initialise_constant_particle_attributes, &
        & update_particle_attributes_and_fields, get_particle_arrays
   use multimaterial_module, only: calculate_sum_material_volume_fractions
-  
+
   implicit none
 
   private
@@ -116,8 +116,8 @@ module particle_diagnostics
           end if
        end do
        k = size(state)
-       
-       !Initialise internal MaterialVolumeFraction field 
+
+       !Initialise internal MaterialVolumeFraction field
        s_field => extract_scalar_field(state(k), "MaterialVolumeFraction")
        call calculate_sum_material_volume_fractions(state, s_field)
        call scale(s_field, -1.0)
@@ -127,7 +127,7 @@ module particle_diagnostics
     !Initialise fields based on number of particles if present
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::number_of_particles")) then
              call calculate_diagnostics_from_particles(state, i, s_field)
           end if
@@ -136,7 +136,7 @@ module particle_diagnostics
     k = size(state)
 
     deallocate(particle_arrays)
-    
+
   end subroutine initialise_constant_particle_diagnostics
 
   subroutine initialise_particle_diagnostics(state)
@@ -144,7 +144,7 @@ module particle_diagnostics
     !dependent on particles, and diagnostic fields to be set after
     !particles are initialised
     type(state_type), dimension(:), intent(inout) :: state
-    
+
     character(len = OPTION_PATH_LEN) :: group_path, subgroup_path, name
     type(scalar_field), pointer :: s_field
     real :: current_time, dt
@@ -169,7 +169,7 @@ module particle_diagnostics
     !Initialise diagnostic fields generated from particles
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::from_particles")) then
              call get_option(trim(s_field%option_path)//"/name", name)
              if (name=="MaterialVolumeFraction") cycle
@@ -197,7 +197,7 @@ module particle_diagnostics
 
     !Check whether there are any particles.
     particle_groups = option_count("/particles/particle_group")
-    
+
     if (particle_groups==0) return
 
     !Update particle attributes
@@ -206,7 +206,7 @@ module particle_diagnostics
     !Update diagnostic fields with algorithm "from_particles"
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::from_particles")) then
              call calculate_diagnostics_from_particles(state, i, s_field)
           end if
@@ -216,7 +216,7 @@ module particle_diagnostics
     !Update diagnostic fields with algorithm "number_of_particles"
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::number_of_particles")) then
              call calculate_diagnostics_from_particles(state, i, s_field)
           end if
@@ -232,18 +232,18 @@ module particle_diagnostics
        call scale(s_field, -1.0)
        call addto(s_field, 1.0)
     end if
-    
+
   end subroutine update_particle_diagnostics
 
   subroutine initialise_particle_diagnostic_fields_post_adapt(state)
-    !subroutine to initialise diagnostic fields dependent on 
+    !subroutine to initialise diagnostic fields dependent on
     !particles after mesh adapt
     type(state_type), dimension(:), intent(inout) :: state
 
     character(len = OPTION_PATH_LEN) :: name
     type(scalar_field), pointer :: s_field
     integer :: i, k, particle_groups, particle_materials
-    
+
     !Check if there are particles
     particle_groups = option_count("/particles/particle_group")
 
@@ -253,14 +253,14 @@ module particle_diagnostics
     if (particle_materials.gt.0) then
        !Initialise MultialVolumeFraction fields dependent on particles
        do i = 1,size(state)
-          s_field => extract_scalar_field(state(i), "MaterialVolumeFraction")     
+          s_field => extract_scalar_field(state(i), "MaterialVolumeFraction")
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::from_particles")) then
              call calculate_diagnostics_from_particles(state, i, s_field)
           end if
        end do
        k = size(state)
-       
-       !Initialise internal MaterialVolumeFraction field 
+
+       !Initialise internal MaterialVolumeFraction field
        s_field => extract_scalar_field(state(k), "MaterialVolumeFraction")
        call calculate_sum_material_volume_fractions(state, s_field)
        call scale(s_field, -1.0)
@@ -270,7 +270,7 @@ module particle_diagnostics
     !Initialise diagnostic fields generated from particles
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::from_particles")) then
              call get_option(trim(s_field%option_path)//"/name", name)
              if (name=="MaterialVolumeFraction") cycle
@@ -282,7 +282,7 @@ module particle_diagnostics
     !Initialise diagnostic fields based on the number of particles
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
-          s_field => extract_scalar_field(state(i),k)     
+          s_field => extract_scalar_field(state(i),k)
           if (have_option(trim(s_field%option_path)//"/diagnostic/algorithm::number_of_particles")) then
              call calculate_diagnostics_from_particles(state, i, s_field)
           end if
@@ -291,7 +291,7 @@ module particle_diagnostics
     k = size(state)
 
   end subroutine initialise_particle_diagnostic_fields_post_adapt
-    
+
   subroutine calculate_diagnostics_from_particles(states, state_index, s_field)
 
     !!! Subroutine to determine which method is being used
@@ -304,13 +304,13 @@ module particle_diagnostics
     call get_option(trim(complete_field_path(s_field%option_path))// "/algorithm/name", lmethod, default = "from_particles")
 
     select case(trim(lmethod))
-       
+
     case("from_particles")
         call calculate_ratio_from_particles(states, state_index, s_field)
-       
+
     case("number_of_particles")
         call calculate_numbers_from_particles(s_field)
-        
+
     end select
 
   end subroutine calculate_diagnostics_from_particles
@@ -343,7 +343,7 @@ module particle_diagnostics
 
     integer :: group_attribute
     integer, allocatable, dimension(:) :: group_arrays
-    
+
     call get_option(trim(complete_field_path(s_field%option_path))// "/algorithm/particle_group/name", lgroup)
     call get_option(trim(complete_field_path(s_field%option_path))// "/algorithm/particle_group/particle_attribute/name", lattribute)
     ewrite(2,*) "Calculate diagnostic field from particle group: ", trim(lgroup), ", attribute: ", trim(lattribute)
@@ -386,7 +386,7 @@ module particle_diagnostics
                 element = particle%element
                 local_crds = particle%local_coords
                 att_value = particle%attributes(group_attribute)
-                
+
                 !Find nodes for specified element
                 nodes => ele_nodes(s_field, element)
 
@@ -397,7 +397,7 @@ module particle_diagnostics
                    node_part_count(node_number) = node_part_count(node_number) + 1.0*local_crds(j)
                 end do
                 particle => particle%next
-                
+
              end do
              if (allocated(local_crds)) then
                 deallocate(local_crds)
@@ -405,7 +405,7 @@ module particle_diagnostics
           end do
 
        else if (have_option(trim(complete_field_path(s_field%option_path))// "/algorithm/interpolation/nearest_neighbour")) then
-       
+
           !Loop over particle arrays
           do i = 1,size(group_arrays)
              particle => particle_lists(group_arrays(i))%first
@@ -417,31 +417,31 @@ module particle_diagnostics
                 element = particle%element
                 local_crds = particle%local_coords
                 att_value = particle%attributes(group_attribute)
-                
+
                 !Find nodes for specified element
                 nodes => ele_nodes(s_field, element)
-                
+
                 ! work out nearest node based on max. local coordinate
                 node_number = nodes(maxloc(local_crds, dim=1))
-                
+
                 !Store particle attribute value on closest node
                 node_values(node_number) = node_values(node_number) + att_value
                 !Increase particle count for this node by 1
                 node_part_count(node_number) = node_part_count(node_number) + 1.0
                 particle => particle%next
-                
+
              end do
              if (allocated(local_crds)) then
                 deallocate(local_crds)
              end if
           end do
        end if
-          
+
        if (nprocs>1) then
           call halo_accumulate(halo, node_part_count)
           call halo_accumulate(halo, node_values)
        end if
-          
+
        do i = 1,node_count(s_field)
           !Determine field value from ratio method
           ratio_val = node_values(i)/node_part_count(i)
@@ -452,7 +452,7 @@ module particle_diagnostics
              s_field%val(i) = ratio_val
           end if
        end do
-       
+
        deallocate(node_values)
        deallocate(node_part_count)
        deallocate(group_arrays)
@@ -536,7 +536,7 @@ module particle_diagnostics
              !Increase particle count for this node by 1
              node_part_count(node_number) = node_part_count(node_number) + 1.0
              particle => particle%next
-             
+
           end do
           if (allocated(local_crds)) then
              deallocate(local_crds)
@@ -549,7 +549,7 @@ module particle_diagnostics
 
        !Loop over all nodes
        do i = 1,node_count(s_field)
-          !Store value on field 
+          !Store value on field
           s_field%val(i) = node_part_count(i)
        end do
        deallocate(node_part_count)
@@ -569,15 +569,15 @@ module particle_diagnostics
   subroutine particle_cv_check(states)
     !Routine to check particle numbers fall within CV thresholds
     !Spawns or deletes particles if numbers exceed or fall below CV thresholds
-    
+
     type(state_type), dimension(:), target, intent(in) :: states
-    
+
     type(mesh_type), pointer :: mesh
     integer, allocatable, dimension(:) :: group_arrays
     integer :: particle_groups, k
     character(len=OPTION_PATH_LEN) :: mesh_name
     character(len=OPTION_PATH_LEN) :: particle_group
-    
+
     logical :: have_attribute_caps, have_radius
     integer :: min_thresh, max_thresh
     real :: radius, cap_percent
@@ -593,7 +593,7 @@ module particle_diagnostics
           !Get the mesh particles will be spawned to
           call get_option("/particles/particle_group["//int2str(k-1)//"]/particle_spawning/mesh/name", mesh_name)
           mesh => extract_mesh(states(1), trim(mesh_name))
-          
+
           !Set minimum and maximum particle thresholds per control volume
           call get_option("/particles/particle_group["//int2str(k-1)//"]/particle_spawning/min_cv_threshhold", min_thresh)
           call get_option("/particles/particle_group["//int2str(k-1)//"]/particle_spawning/max_cv_threshhold", max_thresh)
@@ -624,7 +624,7 @@ module particle_diagnostics
           deallocate(group_arrays)
        end if
     end do
-    
+
   end subroutine particle_cv_check
 
   subroutine spawn_delete_particles(states, mesh, group_arrays, max_thresh, min_thresh, have_radius, radius, cap_percent)
@@ -637,7 +637,7 @@ module particle_diagnostics
     logical, intent(in) :: have_radius
     real, intent(in) :: radius
     real, optional, intent(in) :: cap_percent
-    
+
     type(halo_type), pointer :: halo
     type(detector_linked_list), allocatable, target, dimension(:,:) :: node_particles
     type(detector_linked_list), pointer :: del_node_particles
@@ -673,24 +673,24 @@ module particle_diagnostics
           !Get element, local_crds and attribute value of each particle
           element = particle%element
           local_crds = particle%local_coords
-          
+
           !Find nodes for specified element
           nodes => ele_nodes(mesh, element)
-          
+
           ! work out nearest node based on max. local coordinate
           node_number = nodes(maxloc(local_crds, dim=1))
-          
+
           !Increase particle count for this node by 1
           node_part_count(node_number) = node_part_count(node_number) + 1.0
           call temp_insert(particle,node_particles(i,node_number))
           particle => particle%next
-          
+
        end do
        if (allocated(local_crds)) then
           deallocate(local_crds)
        end if
     end do
-    
+
     if (nprocs>1) then
        call halo_accumulate(halo, node_part_count)
     end if
@@ -746,7 +746,7 @@ module particle_diagnostics
        call halo_accumulate(halo, temp_part_count)
     end if
     node_part_count(:) = node_part_count(:) + temp_part_count(:)
-    
+
     do j=1,size(group_arrays)
        call allsum(summed_particles(j))
        particle_lists(group_arrays(j))%total_num_det=particle_lists(group_arrays(j))%total_num_det+summed_particles(j)
@@ -829,7 +829,7 @@ module particle_diagnostics
     logical, intent(in) :: have_radius
     real, intent(in) :: radius
     real, optional, intent(in) :: cap_percent
-    
+
     type(detector_type), pointer :: particle
     type(detector_type), pointer :: temp_part
 
@@ -870,7 +870,7 @@ module particle_diagnostics
           if (spawn_group.eqv..true.) then
              if (j/=group_spawn) cycle
           end if
-             
+
           id = particle_lists(group_arrays(j))%proc_part_count
           name_len = len(int2str(id+1))+1 !id length + '_'
           tot_len = len(trim(temp_part%name))
@@ -952,7 +952,7 @@ module particle_diagnostics
              call set_spawned_lcoords(max_lcoord, node_coord, node_num, node_numbers)
              temp_part%local_coords=node_coord
           end if
-          
+
           !Convert local particle coordinates to global coordinates
           call local_to_global(xfield, temp_part%local_coords, temp_part%element, temp_part%position)
           temp_part%type = LAGRANGIAN_DETECTOR
@@ -994,13 +994,13 @@ module particle_diagnostics
     integer, intent(in) :: node_num
     real, optional, intent(in) :: cap_percent
     integer, intent(in) :: max_thresh
-    
+
     integer, dimension(:), pointer :: ele_nums
     integer, allocatable, dimension(:,:) :: node_numbers
     integer, allocatable, dimension(:) :: part_counter
     real :: part_total
     logical :: spawn_group
-    
+
     type(detector_type), pointer :: particle
     type(detector_type), pointer :: temp_part
 
@@ -1010,7 +1010,7 @@ module particle_diagnostics
     character(len=OPTION_PATH_LEN) :: name
     character(len=OPTION_PATH_LEN) :: particle_name
     integer :: id, name_len, tot_len
-    integer :: i, j, k, group_spawn
+    integer :: i, j, k, group_spawn, proc_num
     integer, dimension(3) :: attribute_size
     integer, dimension(:), allocatable :: remove_particles
 
@@ -1113,7 +1113,7 @@ module particle_diagnostics
 
                 !add particle to temp particle list
                 call temp_insert(temp_part,node_particles(j,node_num))
-                
+
                 add_particles(j) = add_particles(j) + 1
                 id = id + 1
                 particle_lists(group_arrays(j))%proc_part_count = particle_lists(group_arrays(j))%proc_part_count + 1
@@ -1125,12 +1125,12 @@ module particle_diagnostics
 
     allocate(remove_particles(size(group_arrays)))
     remove_particles(:) = 0
-    
+
     do while(node_part_count(node_num)>max_thresh)
        call delete_particles(node_part_count(node_num), node_particles(:,node_num), group_arrays, remove_particles)
        add_particles(:) = add_particles(:) - remove_particles(:)
     end do
-    
+
     deallocate(remove_particles)
     deallocate(node_coord)
     deallocate(node_numbers)
@@ -1149,7 +1149,7 @@ module particle_diagnostics
 
     real :: rand_lcoord_2, rand_lcoord_3
     integer :: i
-    
+
     if (max_lcoord<0.51) then
        max_lcoord=0.51 !Ensures minimum lcoord is 0.51
     end if
@@ -1212,18 +1212,18 @@ module particle_diagnostics
   subroutine local_to_global(coordinates, l_coords, ele_number, global_coord)
     !Subroutine to convert local coordinates within a specified element
     !to global coordinates within the model domain
-    
+
     type(vector_field), pointer, intent(in) :: coordinates
     real, dimension(:), intent(in) :: l_coords
     integer, intent(in) :: ele_number
     real, dimension(:), intent(inout) :: global_coord
 
     integer :: i
-    
+
     real, dimension(coordinates%dim,coordinates%dim+1) :: coord_ele
     real, dimension(coordinates%mesh%shape%loc) :: l_shape
     real, dimension(coordinates%mesh%shape%quadrature%vertices) :: dum_lcoords
-    
+
     dum_lcoords = l_coords/sum(l_coords) ! You will already have this setup. Local coordinate array
     l_shape = eval_shape(coordinates%mesh%shape, dum_lcoords) ! Evaluate shape function at local_coordinates
     coord_ele=ele_val(coordinates, ele_number) ! global coordinate values of field at nodes of ele_number
@@ -1256,7 +1256,7 @@ module particle_diagnostics
           power_set=.true.
        end if
     end do
-    
+
     do i = 1,power
        call delete_particles(node_part_count, node_particles, group_arrays, remove_particles)
        summed_particles=summed_particles-remove_particles
@@ -1275,7 +1275,7 @@ module particle_diagnostics
     real, intent(inout) :: node_part_count
     integer, intent(in), dimension(:) :: group_arrays
     integer, dimension(:), intent(inout) :: remove_particles
-    
+
     type(detector_type), pointer :: particle
     type(detector_type), pointer :: temp_part
 
@@ -1327,7 +1327,7 @@ module particle_diagnostics
           end if
        end do
     end do
-    
+
   end subroutine delete_particles
-  
+
 end module particle_diagnostics
