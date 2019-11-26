@@ -761,7 +761,7 @@ contains
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
   subroutine set_particle_scalar_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
-       attributes, old_attr_names, old_attr_counts, old_attributes, field_names, field_counts, old_field_names, &
+       attributes, old_attr_names, old_attr_counts, old_attr_Dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
     type(detector_linked_list), intent(in) :: particle_list
@@ -783,6 +783,8 @@ contains
     character, dimension(:,:), intent(in) :: old_attr_names
     !! Number of each of scalar, vector, tensor old attributes
     integer, dimension(3), intent(in) :: old_attr_counts
+    !! Array dimensions of old attributes
+    integer, dimension(:), intent(in) :: old_attr_dims
     !! Attribute values from the previous timestep
     real, dimension(:,:), intent(in) :: old_attributes
     !! Names of fields that are to be passed to Python
@@ -851,7 +853,7 @@ contains
 
     call set_scalar_particles_from_python_fields(func, len(func), dim, nparts, natt, &
          lvx, lvy, lvz, time, dt, field_counts, field_names, field_vals, old_field_counts, old_field_names, &
-         old_field_vals, old_attr_counts, old_attr_names, old_attributes, is_array, attributes, stat)
+         old_field_vals, old_attr_counts, old_attr_names, old_attr_dims, old_attributes, is_array, attributes, stat)
     if (stat/=0) then
        ewrite(-1, *) "Python error, Python string was:"
        ewrite(-1 , *) trim(func)
@@ -923,7 +925,7 @@ contains
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
   subroutine set_particle_vector_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
-       attributes, old_attr_names, old_attr_counts, old_attributes, field_names, field_counts, old_field_names, &
+       attributes, old_attr_names, old_attr_counts, old_attr_dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
     type(detector_linked_list), intent(in) :: particle_list
@@ -945,6 +947,8 @@ contains
     character, dimension(:,:), intent(in) :: old_attr_names
     !! Number of each of scalar, vector, tensor old attributes
     integer, dimension(3), intent(in) :: old_attr_counts
+    !! Array dimensions of old attributes
+    integer, dimension(:), intent(in) :: old_attr_dims
     !! Attribute values from the previous timestep
     real, dimension(:,:), intent(in) :: old_attributes
     !! Names of fields that are to be passed to Python
@@ -1013,7 +1017,7 @@ contains
 
     call set_vector_particles_from_python_fields(func, len(func), dim, nparts, natt, &
          lvx, lvy, lvz, time, dt, field_counts, field_names, field_vals, old_field_counts, old_field_names, &
-         old_field_vals, old_attr_counts, old_attr_names, old_attributes, is_array, attributes, stat)
+         old_field_vals, old_attr_counts, old_attr_names, old_attr_dims, old_attributes, is_array, attributes, stat)
     if (stat/=0) then
       ewrite(-1, *) "Python error, Python string was:"
       ewrite(-1 , *) trim(func)
@@ -1091,7 +1095,7 @@ contains
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
   subroutine set_particle_tensor_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
-       attributes, old_attr_names, old_attr_counts, old_attributes, field_names, field_counts, old_field_names, &
+       attributes, old_attr_names, old_attr_counts, old_attr_dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
     type(detector_linked_list), intent(in) :: particle_list
@@ -1113,6 +1117,8 @@ contains
     character, dimension(:,:), intent(in) :: old_attr_names
     !! Number of each of scalar, vector, tensor old attributes
     integer, dimension(3), intent(in) :: old_attr_counts
+    !! Array dimensions of old attributes
+    integer, dimension(:), intent(in) :: old_attr_dims
     !! Attribute values from the previous timestep
     real, dimension(:,:), intent(in) :: old_attributes
     !! Names of fields that are to be passed to Python
@@ -1184,7 +1190,7 @@ contains
 
     call set_tensor_particles_from_python_fields(func, len(func), dim, nparts, natt, &
          lvx, lvy, lvz, time, dt, field_counts, field_names, field_vals, old_field_counts, old_field_names, &
-         old_field_vals, old_attr_counts, old_attr_names, old_attributes, is_array, tensor_res, stat)
+         old_field_vals, old_attr_counts, old_attr_names, old_attr_dims, old_attributes, is_array, tensor_res, stat)
     if (stat/=0) then
        ewrite(-1, *) "Python error, Python string was:"
        ewrite(-1 , *) trim(func)
