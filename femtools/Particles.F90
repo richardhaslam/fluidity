@@ -1086,10 +1086,11 @@ contains
 
   !> Copy a structure of attribute names by rank
   !! to a 2D character array for passing to C
-  subroutine copy_names_to_array(attr_names, name_array, attr_counts, prefix)
+  subroutine copy_names_to_array(attr_names, name_array, attr_counts, attr_dims, prefix)
     type(attr_names_type), intent(in) :: attr_names
     character, allocatable, dimension(:,:), intent(out) :: name_array
     integer, dimension(3), intent(out) :: attr_counts
+    integer, allocatable, dimension(:), intent(out), optional :: attr_dims
     character(len=*), intent(in), optional :: prefix
 
     integer :: i, j, k, n, np
@@ -1106,6 +1107,10 @@ contains
     attr_counts(2) = size(attr_names%v)
     attr_counts(3) = size(attr_names%t)
     allocate(name_array(FIELD_NAME_LEN, sum(attr_counts)))
+
+    if (present(attr_dims)) then
+      allocate(attr_dims(sum(attr_counts)))
+    end if
 
     ! unfortunately, we have to use a character array for C
     ! interoperability, and we can't assign an array from
@@ -1125,6 +1130,11 @@ contains
 
       ! null terminate
       name_array(np+n+1,j) = C_NULL_CHAR
+
+      ! possibly copy in the dimension
+      if (present(attr_dims)) then
+        attr_dims(j) = attr_names%sn(i)
+      end if
       j = j + 1
     end do
     do i = 1, attr_counts(2)
@@ -1138,6 +1148,9 @@ contains
         name_array(k+np,j) = attr_names%v(i)(k:k)
       end do
       name_array(np+n+1,j) = C_NULL_CHAR
+      if (present(attr_dims)) then
+        attr_dims(j) = attr_names%vn(i)
+      end if
       j = j + 1
     end do
     do i = 1, attr_counts(3)
@@ -1151,6 +1164,9 @@ contains
         name_array(k+np,j) = attr_names%t(i)(k:k)
       end do
       name_array(np+n+1,j) = C_NULL_CHAR
+      if (present(attr_dims)) then
+        attr_dims(j) = attr_names%tn(i)
+      end if
       j = j + 1
     end do
   end subroutine copy_names_to_array
@@ -1183,6 +1199,7 @@ contains
     logical, allocatable, dimension(:) :: store_old_attr
 
     character, allocatable, dimension(:,:) :: old_attr_names, field_names, old_field_names
+    integer, allocatable, dimension(:) :: old_attr_dims
 
     real :: constant
     real, allocatable, dimension(:) :: vconstant
@@ -1210,7 +1227,8 @@ contains
 
     ! store all the old attribute names in a contiguous list
     ! for passing through to python functions
-    call copy_names_to_array(p_list%old_attr_names, old_attr_names, old_attr_counts)
+    ! we also allocate the array of old attribute dims here
+    call copy_names_to_array(p_list%old_attr_names, old_attr_names, old_attr_counts, old_attr_dims)
     call copy_names_to_array(p_list%field_names, field_names, field_counts)
     call copy_names_to_array(p_list%old_field_names, old_field_names, old_field_counts, prefix="Old")
 
@@ -1240,7 +1258,6 @@ contains
     attr_idx = 1
 
     ! calculate new values for all attributes
-    ! TODO handle array vs not in each of these loops (annoying repetition...)
     i_single = 1
     i_array = 1
     do i = 1, nscalar
@@ -1275,7 +1292,7 @@ contains
              p_list, state, positions(:,:), lcoords(:,:), ele(:), &
              nparticles, n, &
              attribute_array(attr_idx:attr_idx+n-1,:), &
-             old_attr_names, old_attr_counts, old_attributes, &
+             old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
              field_names, field_counts, old_field_names, old_field_counts, &
              func, time, dt, is_array)
 
@@ -1323,7 +1340,7 @@ contains
              p_list, state, positions(:,:), lcoords(:,:), ele(:), &
              nparticles, n, &
              attribute_array(attr_idx:attr_idx+n*dim-1,:), &
-             old_attr_names, old_attr_counts, old_attributes, &
+             old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
              field_names, field_counts, old_field_names, old_field_counts, &
              func, time, dt, is_array)
 
@@ -1371,7 +1388,7 @@ contains
               p_list, state, positions(:,:), lcoords(:,:), ele(:), &
               nparticles, n, &
               attribute_array(attr_idx:attr_idx + n*dim**2 - 1,:), &
-              old_attr_names, old_attr_counts, old_attributes, &
+              old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
               field_names, field_counts, old_field_names, old_field_counts, &
               func, time, dt, is_array)
 
@@ -1395,21 +1412,56 @@ contains
       ! need to be stored as old attributes too
       allocate(store_old_attr(size(particle%attributes)))
       attr_idx = 1
-      do n = 1, nscalar
-        store_old_attr(attr_idx) = have_option(trim(subgroup_path) // &
-             '/attributes/scalar_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
-        attr_idx = attr_idx + 1
+
+      i_single = 1
+      i_array = 1
+      do i = 1, nscalar
+        n = p_list%attr_names%sn(i)
+        if (n == 0) then
+          store_old_attr(attr_idx) = have_option(trim(subgroup_path) // &
+               '/attributes/scalar_attribute['//int2str(i_single-1)//']/python_fields/store_old_attribute')
+          i_single = i_single + 1
+          attr_idx = attr_idx + 1
+        else
+          store_old_attr(attr_idx:attr_idx+n-1) = have_option(trim(subgroup_path) // &
+               '/attributes/scalar_attribute_array['//int2str(i_array-1)//']/python_fields/store_old_attribute')
+          i_array = i_array + 1
+          attr_idx = attr_idx + n
+        end if
       end do
 
-      do n = 1, nvector
-        store_old_attr(attr_idx:attr_idx+dim-1) = have_option(trim(subgroup_path) // &
-             '/attributes/vector_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
-        attr_idx = attr_idx + dim
+      i_single = 1
+      i_array = 1
+      do i = 1, nvector
+        n = p_list%attr_names%vn(i)
+        if (n == 0) then
+          store_old_attr(attr_idx:attr_idx+dim-1) = have_option(trim(subgroup_path) // &
+               '/attributes/vector_attribute['//int2str(i_single-1)//']/python_fields/store_old_attribute')
+          i_single = i_single + 1
+          attr_idx = attr_idx + dim
+        else
+          store_old_attr(attr_idx:attr_idx + n*dim-1) = have_option(trim(subgroup_path) // &
+               '/attributes/vector_attribute_array['//int2str(i_array-1)//']/python_fields/store_old_attribute')
+          i_array = i_array + 1
+          attr_idx = attr_idx + n*dim
+        end if
       end do
 
-      do n = 1, ntensor
-        store_old_attr(attr_idx:attr_idx + dim**2 - 1) = have_option(trim(subgroup_path) // &
-             '/attributes/tensor_attribute['//int2str(n-1)//']/python_fields/store_old_attribute')
+      i_single = 1
+      i_array = 1
+      do i = 1, ntensor
+        n = p_list%attr_names%tn(i)
+        if (n == 0) then
+          store_old_attr(attr_idx:attr_idx + dim**2 - 1) = have_option(trim(subgroup_path) // &
+               '/attributes/tensor_attribute['//int2str(i_single-1)//']/python_fields/store_old_attribute')
+          i_single = i_single + 1
+          attr_idx = attr_idx + dim**2
+        else
+          store_old_attr(attr_idx:attr_idx + n*dim**2 - 1) = have_option(trim(subgroup_path) // &
+               '/attributes/tensor_attribute_array['//int2str(i_array-1)//']/python_fields/store_old_attribute')
+          i_array = i_array + 1
+          attr_idx = attr_idx + n*dim**2
+        end if
       end do
 
       do j = 1, nparticles
@@ -1439,6 +1491,7 @@ contains
     deallocate(attribute_array)
     deallocate(old_attributes)
     deallocate(old_attr_names)
+    deallocate(old_attr_dims)
     deallocate(vconstant)
     deallocate(tconstant)
   end subroutine update_particle_subgroup_attributes_and_fields
