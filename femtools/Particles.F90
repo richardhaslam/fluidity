@@ -1649,6 +1649,8 @@ contains
 
     call write_attrs(detector_list%h5_id, dim, detector_list%attr_names, attrib_data, to_write=detector_list%attr_write)
 
+    h5_ierror = h5_flushstep(detector_list%h5_id)
+
     deallocate(node_ids)
     deallocate(attrib_data)
     deallocate(positions)
