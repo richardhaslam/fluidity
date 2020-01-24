@@ -25,15 +25,18 @@
  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307
  USA
 */
-#include <string>
-#include "sam_mpi.h"
+#ifndef FLMPI_H
+#define FLMPI_H
 
-std::string mpiErrorMessage(const int err){
-  char *msg = new char [MPI_MAX_ERROR_STRING];
-  int len;
-  MPI_Error_string(err, msg, &len);
-  std::string mesg(msg);
-  delete [] msg;
-  return mesg;
-}
+#include "confdefs.h"
+#ifdef HAVE_MPI
+#if !defined(MPICH_SKIP_MPICXX)
+#  define MPICH_SKIP_MPICXX 1
+#endif
+#if !defined(OMPI_SKIP_MPICXX)
+#  define OMPI_SKIP_MPICXX 1
+#endif
+#include <mpi.h>
+#endif
 
+#endif
