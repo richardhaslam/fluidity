@@ -41,6 +41,7 @@ module particles
   use spud
   use parallel_fields
   use fields
+  use profiler
   use state_module
   use field_options
   use detector_data_types
@@ -159,7 +160,8 @@ contains
     character(len=*), dimension(3), parameter :: types = ["prescribed", "diagnostic", "prognostic"]
 
     ewrite(2,*) "In initialise_particles"
-
+    
+    call profiler_tic("initialising_particles")
     ! If we're not being called from flredecomp, we'll set up particle output files
     do_output = .true.
     if (present(from_flredecomp)) do_output = .not. from_flredecomp
@@ -419,6 +421,8 @@ contains
     deallocate(particle_arrays)
     call deallocate(field_names)
     call deallocate(old_field_names)
+
+    call profiler_toc("initialising_particles")
   end subroutine initialise_particles
 
   !> Get the names and count of all attributes and old attributes for
@@ -939,6 +943,7 @@ contains
     integer :: i, particle_groups
 
     ewrite(2,*) "In move_particles"
+    call profiler_tic("particle_advection")
 
     particle_groups = option_count("/particles/particle_group")
     if (particle_groups == 0) return
@@ -947,6 +952,8 @@ contains
       call move_lagrangian_detectors(state, particle_lists(i), dt, timestep, &
            particle_lists(i)%total_attributes)
     end do
+
+    call profiler_toc("particle_advection")
   end subroutine move_particles
 
   !> Initialise constant attribute values before diagnostic fields are set
@@ -1063,6 +1070,8 @@ contains
     particle_groups = option_count("/particles/particle_group")
     if (particle_groups == 0) return
 
+    call profiler_tic("update_particle_attributes")
+
     ewrite(2,*) "In update_particle_attributes_and_fields"
 
     list_counter = 1
@@ -1082,6 +1091,7 @@ contains
          list_counter = list_counter + 1
        end do
     end do
+    call profiler_toc("update_particle_attributes")
   end subroutine update_particle_attributes_and_fields
 
   !> Copy a structure of attribute names by rank
@@ -1545,9 +1555,10 @@ contains
     character(len=OPTION_PATH_LEN) :: group_path, subgroup_path
     logical :: output_group
 
-    particle_groups = option_count("/particles/particle_group")
-
     ewrite(1,*) "In write_particles_loop"
+
+    call profiler_tic("particle_I/O")
+    particle_groups = option_count("/particles/particle_group")
 
     list_counter = 1
     do i = 1, particle_groups
@@ -1569,6 +1580,7 @@ contains
           list_counter = list_counter + 1
       end do
     end do
+    call profiler_toc("particle_I/O")
   end subroutine write_particles_loop
 
   !> Write particle attributes for a given subgroup
@@ -1765,6 +1777,7 @@ contains
 
     ! create a new mpi group for active particles only
     ! otherwise the collectives (and especially file writing) will break
+    call profiler_tic("particle_checkpoint")
     if (present(number_of_partitions)) then
       if (getprocno() > number_of_partitions) return
 
@@ -1810,6 +1823,7 @@ contains
        call mpi_comm_free(output_comm, ierr)
        call mpi_group_free(output_group, ierr)
      end if
+     call profiler_toc("particle_checkpoint")
   end subroutine checkpoint_particles_loop
 
   !> Checkpoint a single particle subgroup

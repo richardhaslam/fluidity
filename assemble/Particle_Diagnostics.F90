@@ -39,6 +39,7 @@ module particle_diagnostics
   use parallel_fields, only: node_owned
   use fields_calculations, only: dot_product
   use fields
+  use profiler
   use state_module
   use halos
   use detector_data_types
@@ -76,6 +77,8 @@ module particle_diagnostics
     type(detector_type), pointer :: particle
 
     ewrite(2,*) "In initialise_constant_particle_diagnostics"
+
+    call profiler_tic("initialise_particle_diagnostics")
 
     !Check if there are particles
     particle_groups = option_count("/particles/particle_group")
@@ -136,6 +139,7 @@ module particle_diagnostics
     k = size(state)
 
     deallocate(particle_arrays)
+    call profiler_toc("initialise_particle_diagnostics")
 
   end subroutine initialise_constant_particle_diagnostics
 
@@ -158,6 +162,8 @@ module particle_diagnostics
     particle_groups = option_count("/particles/particle_group")
 
     if (particle_groups==0) return
+    call profiler_tic("initialise_particle_diagnostics")
+    
 
     !Allocate parameters
     call get_option("/timestepping/current_time", current_time)
@@ -178,6 +184,7 @@ module particle_diagnostics
        end do
     end do
     k = size(state)
+    call profiler_toc("initialise_particle_diagnostics")
 
   end subroutine initialise_particle_diagnostics
 
@@ -203,6 +210,7 @@ module particle_diagnostics
     !Update particle attributes
     call update_particle_attributes_and_fields(state, time, dt)
 
+    call profiler_tic("update_particle_diagnostic_fields")
     !Update diagnostic fields with algorithm "from_particles"
     do i = 1,size(state)
        do k = 1,scalar_field_count(state(i))
@@ -233,6 +241,8 @@ module particle_diagnostics
        call addto(s_field, 1.0)
     end if
 
+    call profiler_toc("update_particle_diagnostic_fields")
+
   end subroutine update_particle_diagnostics
 
   subroutine initialise_particle_diagnostic_fields_post_adapt(state)
@@ -243,6 +253,8 @@ module particle_diagnostics
     character(len = OPTION_PATH_LEN) :: name
     type(scalar_field), pointer :: s_field
     integer :: i, k, particle_groups, particle_materials
+
+    call profiler_tic("initialise_particle_diagnostics_post_adapt")
 
     !Check if there are particles
     particle_groups = option_count("/particles/particle_group")
@@ -289,6 +301,8 @@ module particle_diagnostics
        end do
     end do
     k = size(state)
+
+    call profiler_toc("initialise_particle_diagnostics_post_adapt")
 
   end subroutine initialise_particle_diagnostic_fields_post_adapt
 
@@ -584,6 +598,7 @@ module particle_diagnostics
 
     ewrite(2,*) "In particle_cv_check"
 
+    call profiler_tic("particles_spawn_delete")
     !Check if there are particles
     particle_groups = option_count('/particles/particle_group')
 
@@ -624,6 +639,7 @@ module particle_diagnostics
           deallocate(group_arrays)
        end if
     end do
+    call profiler_toc("particles_spawn_delete")
 
   end subroutine particle_cv_check
 
