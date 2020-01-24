@@ -22,6 +22,7 @@ module zoltan_integration
   use parallel_fields
   use metric_tools
   use fields
+  use profiler
   use state_module
   use field_options
   use vtk_interfaces
@@ -1915,7 +1916,6 @@ module zoltan_integration
     type(element_type), pointer :: shape
 
     ewrite(1,*) "In update_detector_list_element"
-
     send_count=0
 
     !Loop for detectors or particles with no attributes
@@ -2059,7 +2059,7 @@ module zoltan_integration
     type(element_type), pointer :: shape
 
     ewrite(1,*) "In update_particle_list_element"
-
+    
     !Loop for particles with attributes
 
     do j = 1, size(detector_list_array)
@@ -2257,6 +2257,8 @@ module zoltan_integration
     allocate(export_global_ids(num_export))
     allocate(export_procs(num_export))
 
+    call profiler_tic("zoltan_detectors")
+
     ! allocate array for storing the number of detectors in each of the elements to be transferred
     allocate(zoltan_global_ndets_in_ele(num_export))
     zoltan_global_ndets_in_ele(:) = 0
@@ -2265,6 +2267,8 @@ module zoltan_integration
     zoltan_global_ndims = zoltan_global_zz_positions%dim
     zoltan_global_ndata_per_det = detector_buffer_size(zoltan_global_ndims, .false.)
     ewrite(2,*) "Amount of data to be transferred per detector: ", zoltan_global_ndata_per_det
+
+    call profiler_toc("zoltan_detectors")
     
     head = 1
     do i=1,size(sends)
@@ -2287,6 +2291,7 @@ module zoltan_integration
          & num_import, import_global_ids, import_local_ids, import_procs)
     assert(ierr == ZOLTAN_OK)
 
+    call profiler_tic("zoltan_detectors")
     ! Get all detector lists
     call get_registered_detector_lists(detector_list_array)
 
@@ -2340,6 +2345,8 @@ module zoltan_integration
           ewrite(2,*) "Detector list", j, "has", detector_list_array(j)%ptr%length, "local and ", detector_list_array(j)%ptr%total_num_det, "global detectors"
        end do
     end if
+    call profiler_toc("zoltan_detectors")
+    
 
     ierr = Zoltan_LB_Free_Part(import_global_ids, import_local_ids, import_procs, import_to_part)
     assert(ierr == ZOLTAN_OK)

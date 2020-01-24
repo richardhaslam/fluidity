@@ -37,6 +37,7 @@ module detector_move_lagrangian
   use halos_base
   use parallel_fields
   use fields
+  use profiler
   use state_module
   use detector_data_types
   use detector_tools
@@ -219,9 +220,10 @@ contains
                 !than leaving the physical domain. In this subroutine
                 !such detectors are removed from the detector list
                 !and added to the send_list_array
+                call profiler_tic("move_particles_guided_search")
                 call move_detectors_guided_search(detector_list,&
                         vfield,xfield,send_list_array,parameters%search_tolerance)
-
+                call profiler_toc("move_particles_guided_search")
                 ! Work out whether all send lists are empty, in which case exit.
                 all_send_lists_empty=0
                 do k=1, nprocs

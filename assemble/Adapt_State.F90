@@ -44,6 +44,7 @@ module adapt_state_module
   use parallel_fields
   use intersection_finder_module
   use fields
+  use profiler
   use state_module
   use vtk_interfaces
   use halos
@@ -1228,10 +1229,11 @@ contains
 
       if (get_num_detector_lists()>0) then
         ! Update detector element and local_coords for every detector in all lists
+        call profiler_tic("find_particles_mesh_adapt")
         do j = 1, size(detector_list_array)
            call search_for_detectors(detector_list_array(j)%ptr, new_positions)
         end do
-
+        call profiler_toc("find_particles_mesh_adapt")
 #ifdef DDEBUG
         ! Sanity check that all local detectors are owned
         call get_registered_detector_lists(detector_list_array)
