@@ -865,7 +865,6 @@ contains
     detector%position = position
     detector%element = element
     detector%local_coords = lcoords
-    detector%type = LAGRANGIAN_DETECTOR
     detector%id_number = id
     detector%proc_id = proc_id
     detector_list%proc_part_count = detector_list%proc_part_count + 1

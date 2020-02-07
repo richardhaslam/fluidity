@@ -1403,13 +1403,13 @@ contains
 
   end subroutine initialise_steady_state
 
-  subroutine create_single_detector(detector_list,xfield,position,id,proc_id,type,name)
+  subroutine create_single_detector(detector_list,xfield,position,id,proc_id,name)
     ! Allocate a single detector, populate and insert it into the given list
     ! In parallel, first check if the detector would be local and only allocate if it is
     type(detector_linked_list), intent(inout) :: detector_list
     type(vector_field), pointer :: xfield
     real, dimension(xfield%dim), intent(in) :: position
-    integer, intent(in) :: id, proc_id, type
+    integer, intent(in) :: id, proc_id
     character(len=*), intent(in) :: name
 
     type(detector_type), pointer :: detector
@@ -1454,7 +1454,6 @@ contains
     detector%position=position
     detector%element=element
     detector%local_coords=lcoords
-    detector%type=type
     detector%id_number=id
     detector%proc_id=proc_id
     detector_list%proc_part_count = detector_list%proc_part_count + 1
@@ -1472,7 +1471,7 @@ contains
 
     integer :: column, i, j, k, phase, m, IERROR, field_count, totaldet_global
     integer :: static_dete, python_functions_or_files, total_dete, total_dete_groups
-    integer :: python_dete, ndete, dim, str_size, type_det, group_size, proc_num
+    integer :: python_dete, ndete, dim, str_size, group_size, proc_num
     integer(kind=8) :: h5_ierror
     integer, dimension(2) :: shape_option
     character(len = 254) :: buffer, material_phase_name, fmt
@@ -1571,7 +1570,7 @@ contains
           default_stat%number_det_in_each_group(i)=1.0
 
           call create_single_detector(default_stat%detector_list, xfield, &
-                detector_location, i, proc_num, STATIC_DETECTOR, trim(detector_name))
+                detector_location, i, proc_num, trim(detector_name))
        end do
 
        k=static_dete+1
@@ -1584,7 +1583,6 @@ contains
           str_size=len_trim(int2str(ndete))
           fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
 
-          type_det = STATIC_DETECTOR
           default_stat%detector_group_names(i+static_dete) = trim(funcnam)
           default_stat%number_det_in_each_group(i+static_dete) = ndete
 
@@ -1599,7 +1597,7 @@ contains
                 write(detector_name, fmt) trim(funcnam)//"_", j
 
                 call create_single_detector(default_stat%detector_list, xfield, &
-                       coords(:,j), k, proc_num, type_det, trim(detector_name))
+                       coords(:,j), k, proc_num, trim(detector_name))
                 k=k+1
              end do
              deallocate(coords)
@@ -1621,7 +1619,7 @@ contains
                 write(detector_name, fmt) trim(funcnam)//"_", j
                 read(default_stat%detector_file_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, k, proc_num, type_det, trim(detector_name))
+                      detector_location, k, proc_num, trim(detector_name))
                 k=k+1
              end do
           end if
@@ -1666,7 +1664,7 @@ contains
              if (default_stat%detector_group_names(j)==temp_name) then
                 read(default_stat%detector_checkpoint_unit) detector_location
                 call create_single_detector(default_stat%detector_list, xfield, &
-                      detector_location, i, proc_num, STATIC_DETECTOR, trim(temp_name))
+                      detector_location, i, proc_num, trim(temp_name))
              else
                 cycle
              end if
@@ -1685,13 +1683,11 @@ contains
                 str_size=len_trim(int2str(ndete))
                 fmt="(a,I"//int2str(str_size)//"."//int2str(str_size)//")"
 
-                type_det = STATIC_DETECTOR
-
                 do m=1,default_stat%number_det_in_each_group(j)
                    write(detector_name, fmt) trim(temp_name)//"_", m
                    read(default_stat%detector_checkpoint_unit) detector_location
                    call create_single_detector(default_stat%detector_list, xfield, &
-                          detector_location, k, proc_num, type_det, trim(detector_name))
+                          detector_location, k, proc_num, trim(detector_name))
                    k=k+1
                 end do
              else
@@ -1828,14 +1824,13 @@ contains
 
   end function constant_tag
   
-  subroutine write_diagnostics(state, time, dt, timestep, not_to_move_det_yet)
+  subroutine write_diagnostics(state, time, dt, timestep)
     !!< Write the diagnostics to the previously opened diagnostics file.
 
     use particles, only: particle_lists
     type(state_type), dimension(:), intent(inout) :: state
     real, intent(in) :: time, dt
     integer, intent(in) :: timestep
-    logical, intent(in), optional :: not_to_move_det_yet 
 
     character(len = 2 + real_format_len(padding = 1) + 1) :: format, format2, format3, format4
     character(len = OPTION_PATH_LEN) :: func
@@ -1859,16 +1854,9 @@ contains
     type(vector_field) :: xfield
     type(scalar_field), pointer :: cv_mass => null()
     type(registered_diagnostic_item), pointer :: iterator => NULL()
-    logical :: l_move_detectors
 
     ewrite(1,*) 'In write_diagnostics'
     call profiler_tic("I/O")
-
-    if(present_and_true(not_to_move_det_yet)) then
-       l_move_detectors=.false.
-    else
-       l_move_detectors=.true.
-    end if
 
     format="(" // real_format(padding = 1) // ")"
     format2="(2" // real_format(padding = 1) // ")"
@@ -2744,8 +2732,7 @@ contains
              list_into_array(i,1:dim)=node%position
              list_into_array(i,dim+1)=node%element
              list_into_array(i,dim+2)=node%id_number
-             list_into_array(i,dim+3)=node%type
-             list_into_array(i,dim+4)=0.0
+             list_into_array(i,dim+3)=0.0
 
              node => node%next
     

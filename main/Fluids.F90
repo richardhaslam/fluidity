@@ -388,7 +388,7 @@ contains
     call initialise_steady_state(filename, state)
     call initialise_advection_convergence(state)
 
-    if(have_option("/io/stat/output_at_start")) call write_diagnostics(state, current_time, dt, timestep, not_to_move_det_yet=.true.)
+    if(have_option("/io/stat/output_at_start")) call write_diagnostics(state, current_time, dt, timestep)
 
     not_to_move_det_yet=.false.
 
@@ -797,14 +797,14 @@ contains
              call pre_adapt_tasks(sub_state)
 
              call qmesh(state, metric_tensor)
-             if(have_option("/io/stat/output_before_adapts")) call write_diagnostics(state, current_time, dt, timestep, not_to_move_det_yet=.true.)
+             if(have_option("/io/stat/output_before_adapts")) call write_diagnostics(state, current_time, dt, timestep)
              call run_diagnostics(state)
 
              call adapt_state(state, metric_tensor)
 
              call update_state_post_adapt(state, metric_tensor, dt, sub_state, nonlinear_iterations, nonlinear_iterations_adapt)
 
-             if(have_option("/io/stat/output_after_adapts")) call write_diagnostics(state, current_time, dt, timestep, not_to_move_det_yet=.true.)
+             if(have_option("/io/stat/output_after_adapts")) call write_diagnostics(state, current_time, dt, timestep)
              call run_diagnostics(state)
  
           end if
@@ -813,13 +813,13 @@ contains
 
              call pre_adapt_tasks(sub_state)
 
-             if(have_option("/io/stat/output_before_adapts")) call write_diagnostics(state, current_time, dt, timestep, not_to_move_det_yet=.true.)
+             if(have_option("/io/stat/output_before_adapts")) call write_diagnostics(state, current_time, dt, timestep)
              call run_diagnostics(state)
 
              call adapt_state_prescribed(state, current_time)
              call update_state_post_adapt(state, metric_tensor, dt, sub_state, nonlinear_iterations, nonlinear_iterations_adapt)
 
-             if(have_option("/io/stat/output_after_adapts")) call write_diagnostics(state, current_time, dt, timestep, not_to_move_det_yet=.true.)
+             if(have_option("/io/stat/output_after_adapts")) call write_diagnostics(state, current_time, dt, timestep)
              call run_diagnostics(state)
 
           end if

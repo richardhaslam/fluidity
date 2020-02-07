@@ -283,7 +283,6 @@ contains
     new_detector%position = old_detector%position
     new_detector%element = old_detector%element
     new_detector%id_number = old_detector%id_number
-    new_detector%type = old_detector%type
     new_detector%name = old_detector%name
     new_detector%local_coords=old_detector%local_coords
       
@@ -502,8 +501,8 @@ contains
     integer, dimension(3), optional, intent(in) :: attribute_size !array to hold size of attributes
     integer :: det_params
     assert(size(detector%position)==ndims)
-    !Set size of basic detector fields: detector element, id_number, proc_id and type
-    det_params = 4
+    !Set size of basic detector fields: detector element, id_number, proc_id
+    det_params = 3
     !Check if this is a particle carrying attributes
     if (present(attribute_size)) then
        assert(size(buff)>=ndims+det_params+sum(attribute_size))
@@ -512,7 +511,6 @@ contains
        buff(ndims+1) = detector%element
        buff(ndims+2) = detector%id_number
        buff(ndims+3) = detector%proc_id
-       buff(ndims+4) = detector%type
        if (attribute_size(1).ne.0) then
           buff(ndims+det_params+1:ndims+det_params+attribute_size(1)) = detector%attributes
        end if
@@ -546,7 +544,6 @@ contains
        buff(ndims+1) = detector%element
        buff(ndims+2) = detector%id_number
        buff(ndims+3) = detector%proc_id
-       buff(ndims+4) = detector%type
 
        ! Lagrangian advection fields: (nstages+1)*ndims
        if (present(nstages)) then
@@ -575,8 +572,8 @@ contains
     integer, dimension(3), optional, intent(in) :: attribute_size !array to hold size of attributes
 
     integer :: det_params
-    !Set size of basic detector fields, being detector element, id_number and type
-    det_params = 4
+    !Set size of basic detector fields, being detector element, id_number
+    det_params = 3
     
     !Check if this is a particle carrying attributes
     if (present(attribute_size)) then
@@ -594,7 +591,6 @@ contains
        detector%element = buff(ndims+1)
        detector%id_number = buff(ndims+2)
        detector%proc_id = buff(ndims+3)
-       detector%type = buff(ndims+4)
        if (attribute_size(1)/=0) then  
           detector%attributes = buff(ndims+det_params+1:ndims+det_params+attribute_size(1))
        end if
@@ -658,7 +654,6 @@ contains
        detector%element = buff(ndims+1)
        detector%id_number = buff(ndims+2)
        detector%proc_id = buff(ndims+3)
-       detector%type = buff(ndims+4)
        
        ! Reconstruct element number if global-to-local mapping is given
        if (present(global_to_local)) then

@@ -971,7 +971,6 @@ module particle_diagnostics
 
           !Convert local particle coordinates to global coordinates
           call local_to_global(xfield, temp_part%local_coords, temp_part%element, temp_part%position)
-          temp_part%type = LAGRANGIAN_DETECTOR
           !Copy parent particle attributes
           temp_part%attributes(:) = particle%attributes(:)
           temp_part%old_attributes(:) = particle%old_attributes(:)
@@ -1112,7 +1111,6 @@ module particle_diagnostics
 
                 !Convert newly spawned particle's local coords to global coords
                 call local_to_global(xfield, temp_part%local_coords, temp_part%element, temp_part%position)
-                temp_part%type = LAGRANGIAN_DETECTOR
                 !Copy parent particle attributes
                 temp_part%attributes(:) = particle%attributes(:)
                 temp_part%old_attributes(:) = particle%old_attributes(:)
