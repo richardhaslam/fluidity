@@ -36,6 +36,7 @@ module detector_move_lagrangian
   use parallel_tools
   use halos_base
   use parallel_fields
+  use transform_elements
   use fields
   use state_module
   use detector_data_types
@@ -315,7 +316,7 @@ contains
        end if
 
        ! stage vector is computed by evaluating velocity at current position
-       stage_local_coords=local_coords(xfield,det0%element,det0%update_vector)
+       stage_local_coords=det0%local_coords
        det0%k(stage0,:)=parameters%timestep_nodes(stage0)*eval_field(det0%element, vfield, stage_local_coords) + &
             (1.-parameters%timestep_nodes(stage0))*eval_field(det0%element, vfield_old, stage_local_coords)
        if(stage0<parameters%n_stages) then

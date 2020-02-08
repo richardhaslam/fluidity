@@ -20,6 +20,7 @@ module zoltan_integration
   use linked_lists
   use halos_ownership
   use parallel_fields
+  use transform_elements
   use metric_tools
   use fields
   use state_module
@@ -1915,6 +1916,7 @@ module zoltan_integration
     type(element_type), pointer :: shape
 
     ewrite(1,*) "In update_detector_list_element"
+
     send_count=0
 
     !Loop for detectors or particles with no attributes
@@ -1943,6 +1945,7 @@ module zoltan_integration
           if(has_key(zoltan_global_uen_to_new_local_numbering, old_universal_element_number)) then
              ! Update the element number for the detector
              detector%element = fetch(zoltan_global_uen_to_new_local_numbering, old_universal_element_number)
+             detector%local_coords = local_coords(zoltan_global_new_positions,detector%element,detector%position)
              detector => detector%next
           else
              ! We no longer own the element containing this detector, and cannot establish its new
@@ -2020,6 +2023,10 @@ module zoltan_integration
                    new_local_element_number = fetch(zoltan_global_uen_to_new_local_numbering, detector%element)
                    if (element_owned(zoltan_global_new_positions%mesh, new_local_element_number)) then
                       detector%element = new_local_element_number
+                      if (.not. allocated(detector%local_coords)) then
+                         allocate(detector%local_coords(local_coord_count(ele_shape(zoltan_global_new_positions,1))))
+                      end if
+                      detector%local_coords=local_coords(zoltan_global_new_positions,detector%element,detector%position)
                       call insert(detector, detector_list_array(detector%list_id)%ptr)
                       detector => null()
                    else
@@ -2089,6 +2096,7 @@ module zoltan_integration
           if(has_key(zoltan_global_uen_to_new_local_numbering, old_universal_element_number)) then
              ! Update the element number for the particle
              detector%element = fetch(zoltan_global_uen_to_new_local_numbering, old_universal_element_number)
+             detector%local_coords = local_coords(zoltan_global_new_positions,detector%element,detector%position)
              detector => detector%next
           else
              ! We no longer own the element containing this particle, and cannot establish its new
@@ -2174,7 +2182,10 @@ module zoltan_integration
                       new_local_element_number = fetch(zoltan_global_uen_to_new_local_numbering, detector%element)
                       if (element_owned(zoltan_global_new_positions%mesh, new_local_element_number)) then
                          detector%element = new_local_element_number
-                         call picker_inquire(zoltan_global_new_positions, detector%position, detector%element, detector%local_coords, global=.false.)
+                         if (.not. allocated(detector%local_coords)) then
+                            allocate(detector%local_coords(local_coord_count(ele_shape(zoltan_global_new_positions,1))))
+                         end if
+                         detector%local_coords=local_coords(zoltan_global_new_positions,detector%element,detector%position)
                          call insert(detector, detector_list_array(detector%list_id)%ptr)
                          detector => null()
                       else
