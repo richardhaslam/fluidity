@@ -37,7 +37,6 @@ module detector_parallel
   use parallel_tools
   use parallel_fields
   use fields
-  use profiler
   use state_module
   use halos
   use detector_data_types
@@ -144,7 +143,6 @@ contains
     type(element_type), pointer :: shape  
 
     ewrite(2,*) "In distribute_detectors"
-    call profiler_tic("distribute_detectors")
     if (present(positions)) then
        xfield => positions
     else
@@ -191,7 +189,6 @@ contains
        end if
     end do
     call allmax(all_send_lists_empty)
-    call profiler_toc("distribute_detectors")
     if (all_send_lists_empty/=0) then
        if (present(positions)) then
           call exchange_detectors(state,detector_list,send_list_array, attribute_size, positions)
@@ -199,7 +196,6 @@ contains
           call exchange_detectors(state,detector_list,send_list_array, attribute_size)
        end if
     end if
-    call profiler_tic("distribute_detectors")
 
     ! Make sure send lists are empty and deallocate them
     do k=1, nprocs
@@ -313,7 +309,6 @@ contains
     end if
 
     ewrite(2,*) "Finished broadcast"
-    call profiler_toc("distribute_detectors")
 
   end subroutine distribute_detectors
 
@@ -341,8 +336,6 @@ contains
     logical :: have_update_vector
 
     ewrite(2,*) "In exchange_detectors"
-
-    call profiler_tic("exchange_detectors")
 
     ! We want a sendlist for every processor
     nprocs=getnprocs()
@@ -488,9 +481,7 @@ contains
 
     call deallocate(ele_numbering_inverse)
 
-    ewrite(2,*) "Exiting exchange_detectors"
-    call profiler_toc("exchange_detectors")
-    
+    ewrite(2,*) "Exiting exchange_detectors"    
 
   end subroutine exchange_detectors
 
