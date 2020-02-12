@@ -1808,9 +1808,13 @@ contains
           cycle
         end if
 
-        !Ensure all particles are local before checkpointing
-        call distribute_detectors(state(1),particle_lists(list_counter),attribute_size=particle_lists(list_counter)%total_attributes, &
-             positions = xfield)
+        !Ensure all particles are local before checkpointing (if multiple procs)
+        if (present(number_of_partitions) .and. number_of_partitions==1) then
+           !Don't call distribute detectors if decomposing to 1 core
+        else
+           call distribute_detectors(state(1),particle_lists(list_counter),attribute_size=particle_lists(list_counter)%total_attributes, &
+                positions = xfield)
+        end if
         !Checkpoint particle group
         call checkpoint_particles_subgroup(state, prefix, postfix, cp_no, particle_lists(list_counter), &
              name, subgroup_path, subgroup_path_name, output_comm)

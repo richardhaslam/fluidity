@@ -150,6 +150,7 @@ contains
     end if
     ! We allocate a point-to-point sendlist for every processor
     nprocs=getnprocs()
+    if (nprocs==1) return
     allocate(send_list_array(nprocs))
     bcast_count=0
 

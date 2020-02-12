@@ -471,7 +471,7 @@ contains
     integer, intent(in), optional :: nstages
     integer :: detector_buffer_size, det_params
     integer, dimension(3), optional, intent(in) :: attribute_size !array to hold size of attributes
-    det_params = 4 !size of basic detector fields: detector element, id_number, proc_id and type
+    det_params = 3 !size of basic detector fields: detector element, id_number and proc_id
     if (present(attribute_size)) then
        if (have_update_vector) then
           assert(present(nstages))
