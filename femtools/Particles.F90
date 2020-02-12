@@ -1808,9 +1808,9 @@ contains
           cycle
         end if
 
-        !Ensure all particles are local before checkpointing (if multiple procs)
-        if (present(number_of_partitions) .and. number_of_partitions==1) then
-           !Don't call distribute detectors if decomposing to 1 core
+        !Ensure all particles are local before checkpointing
+        if (present(number_of_partitions)) then
+           !Don't call distribute detectors if in flredecomp
         else
            call distribute_detectors(state(1),particle_lists(list_counter),attribute_size=particle_lists(list_counter)%total_attributes, &
                 positions = xfield)
