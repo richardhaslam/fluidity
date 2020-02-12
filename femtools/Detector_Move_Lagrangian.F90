@@ -163,19 +163,17 @@ contains
 
   end subroutine read_detector_move_options
 
-  subroutine move_lagrangian_detectors(state, detector_list, dt, timestep, attribute_size)
+  subroutine move_lagrangian_detectors(state, detector_list, dt, attribute_size)
     type(state_type), dimension(:), intent(in) :: state
     type(detector_linked_list), intent(inout) :: detector_list
     real, intent(in) :: dt
-    integer, intent(in) :: timestep
     integer, dimension(3), optional, intent(in) :: attribute_size !Array to hold attribute sizes
 
     type(rk_gs_parameters), pointer :: parameters
     type(vector_field), pointer :: vfield, vfield_old, xfield
-    type(detector_type), pointer :: detector
+    type(vector_field) :: vfield_stage
     type(detector_linked_list), dimension(:), allocatable :: send_list_array
-    type(halo_type), pointer :: ele_halo
-    integer :: i, j, k, num_proc, dim, all_send_lists_empty, nprocs, stage, cycle
+    integer :: k, all_send_lists_empty, nprocs, stage, cycle
     logical :: any_lagrangian
     real :: rk_dt
 
@@ -188,7 +186,10 @@ contains
     ! Pull some information from state
     xfield     => extract_vector_field(state(1),"Coordinate")
     vfield     => extract_vector_field(state(1),"Velocity")
-    vfield_old => extract_vector_field(state(1),"OldVelocity")    
+    vfield_old => extract_vector_field(state(1),"OldVelocity")
+
+    ! velocity interpolate at time-level of each stage
+    call allocate(vfield_stage, vfield%dim, vfield%mesh, "StagedVelocity")   
 
     ! We allocate a sendlist for every processor
     nprocs=getnprocs()
@@ -201,8 +202,11 @@ contains
     subcycling_loop: do cycle = 1, parameters%n_subcycles
        RKstages_loop: do stage = 1, parameters%n_stages
 
+          ! interpolate velocity at time-level of this stage:
+          call set(vfield_stage, vfield, vfield_old, parameters%timestep_nodes(stage))
+          
           ! Compute the update vector
-          call set_stage(detector_list,vfield,vfield_old,xfield,rk_dt,stage)
+          call set_stage(detector_list, vfield_stage, rk_dt, stage)
 
           ! This loop continues until all detectors have completed their
           ! timestep this is measured by checking if the send and receive
@@ -215,7 +219,7 @@ contains
              !such detectors are removed from the detector list
              !and added to the send_list_array
              call move_detectors_guided_search(detector_list,&
-                  vfield,xfield,send_list_array,parameters%search_tolerance)
+                  xfield,send_list_array,parameters%search_tolerance)
              ! Work out whether all send lists are empty, in which case exit.
              all_send_lists_empty=0
              do k=1, nprocs
@@ -233,6 +237,8 @@ contains
           end do detector_timestepping_loop
        end do RKstages_loop
     end do subcycling_loop
+
+    call deallocate(vfield_stage)
 
     deallocate(send_list_array)
 
@@ -292,18 +298,17 @@ contains
     end do
   end subroutine deallocate_rk_guided_search
 
-  subroutine set_stage(detector_list,vfield,vfield_old,xfield,dt0,stage0)
+  subroutine set_stage(detector_list, vfield, dt0, stage0)
     ! Compute the vector to search for in the next RK stage
     ! If this is the last stage, update detector position
     type(detector_linked_list), intent(inout) :: detector_list
-    type(vector_field), pointer, intent(in) :: vfield, vfield_old, xfield
+    type(vector_field), intent(in) :: vfield
     real, intent(in) :: dt0
     integer, intent(in) :: stage0
     
     type(rk_gs_parameters), pointer :: parameters
     type(detector_type), pointer :: det0
     integer :: j0
-    real, dimension(mesh_dim(xfield)+1) :: stage_local_coords
 
     parameters => detector_list%move_parameters
     
@@ -316,9 +321,7 @@ contains
        end if
 
        ! stage vector is computed by evaluating velocity at current position
-       stage_local_coords=det0%local_coords
-       det0%k(stage0,:)=parameters%timestep_nodes(stage0)*eval_field(det0%element, vfield, stage_local_coords) + &
-            (1.-parameters%timestep_nodes(stage0))*eval_field(det0%element, vfield_old, stage_local_coords)
+       det0%k(stage0,:)= eval_field(det0%element, vfield, det0%local_coords)
        if(stage0<parameters%n_stages) then
           ! update vector maps from current position to place required
           ! for computing next stage vector
@@ -341,7 +344,7 @@ contains
   end subroutine set_stage
 
 
-  subroutine move_detectors_guided_search(detector_list,vfield,xfield,send_list_array,search_tolerance)
+  subroutine move_detectors_guided_search(detector_list,xfield,send_list_array,search_tolerance)
     !Subroutine to find the element containing the update vector:
     ! - Detectors leaving the computational domain are set to DELETE
     ! - Detectors leaving the processor domain are added to the list 
@@ -353,13 +356,11 @@ contains
     !   and moving to the element through that face.
     type(detector_linked_list), intent(inout) :: detector_list
     type(detector_linked_list), dimension(:), intent(inout) :: send_list_array
-    type(vector_field), pointer, intent(in) :: vfield,xfield
+    type(vector_field), pointer, intent(in) :: xfield
     real, intent(in) :: search_tolerance
 
     type(detector_type), pointer :: det0, det_send, det_next
-    integer :: det_count
-    logical :: owned
-    real, dimension(mesh_dim(vfield)+1) :: arrival_local_coords
+    real, dimension(mesh_dim(xfield)+1) :: arrival_local_coords
     integer, dimension(:), pointer :: neigh_list
     integer :: neigh, proc_local_number, deleted_detectors
     logical :: make_delete
@@ -397,7 +398,7 @@ contains
              else
                 !check if this element is owned (to decide where
                 !to send particles leaving the processor domain)
-                if (element_owned(vfield,det0%element)) then
+                if (element_owned(xfield,det0%element)) then
                    !this face goes outside of the computational domain
                    !try all of the faces with negative local coordinate
                    !just in case we went through a corner
@@ -411,7 +412,7 @@ contains
                    end do face_search
                    if (make_delete) then
                       ewrite(1,*) "WARNING: detector attempted to leave computational &
-                           domain; deleting detector, detector ID:", det0%id_number, "detector element:", det0%element
+                           &domain; deleting detector, detector ID:", det0%id_number, "detector element:", det0%element
                       if (associated(det0%previous)) then
                          det0%previous%next => det0%next
                       else
@@ -434,7 +435,7 @@ contains
                    det_send => det0
                    det0 => det0%next
                    !this face goes into another computational domain
-                   proc_local_number=element_owner(vfield%mesh,det_send%element)
+                   proc_local_number=element_owner(xfield%mesh,det_send%element)
 
                    call move(det_send, detector_list, send_list_array(proc_local_number))
                    !move on to the next detector

@@ -932,10 +932,9 @@ contains
   end subroutine copy_attrs
 
   !> Call move_lagrangian_detectors on all tracked particle groups
-  subroutine move_particles(state, dt, timestep)
+  subroutine move_particles(state, dt)
     type(state_type), dimension(:), intent(in) :: state
     real, intent(in) :: dt
-    integer, intent(in) :: timestep
 
     integer :: i, particle_groups
 
@@ -946,7 +945,7 @@ contains
     if (particle_groups == 0) return
 
     do i = 1, size(particle_lists)
-      call move_lagrangian_detectors(state, particle_lists(i), dt, timestep, &
+      call move_lagrangian_detectors(state, particle_lists(i), dt, &
            particle_lists(i)%total_attributes)
     end do
 
