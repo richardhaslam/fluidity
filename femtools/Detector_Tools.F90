@@ -703,12 +703,11 @@ contains
 
   !> Given the particle position and time, evaluate the specified python function for a group of particles
   !! specified in the string func at that location.
-  subroutine set_particle_scalar_attribute_from_python(attributes, positions, nparts, natt, func, time, dt, is_array)
+  subroutine set_particle_scalar_attribute_from_python(attributes, positions, natt, func, time, dt, is_array)
+    !! (natt x nparts) array of calculated attribute values
     real, dimension(:,:), intent(out) :: attributes
     !! Current particle positions
     real, dimension(:,:), target, intent(in) :: positions
-    !! Number of particles
-    integer, intent(in) :: nparts
     !! Array dimension of this attribute
     integer, intent(in) :: natt
     !! Func may contain any python at all but the following function must
@@ -727,7 +726,7 @@ contains
     real, dimension(0), target :: zero
     integer :: stat, dim
 
-    dim = size(positions(:,1))
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
@@ -746,10 +745,10 @@ contains
     if (is_array) then
       ! call interface with additional array dimension argument
       call set_scalar_particles_from_python(func, len(func), dim, &
-           nparts, natt, lvx, lvy, lvz, time, dt, attributes, stat)
+           size(attributes,2), natt, lvx, lvy, lvz, time, dt, attributes, stat)
     else
       call set_scalar_particles_from_python(func, len(func), dim, &
-           nparts, lvx, lvy, lvz, time, dt, attributes, stat)
+           size(attributes,2), lvx, lvy, lvz, time, dt, attributes, stat)
     end if
     if (stat/=0) then
       ewrite(-1, *) "Python error, Python string was:"
@@ -760,7 +759,7 @@ contains
 
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
-  subroutine set_particle_scalar_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
+  subroutine set_particle_scalar_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, natt, &
        attributes, old_attr_names, old_attr_counts, old_attr_Dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
@@ -773,8 +772,6 @@ contains
     real, dimension(:,:), intent(in) :: lcoords
     !! Elements containing particles
     integer, dimension(:), intent(in) :: ele
-    !! Number of particles
-    integer, intent(in) :: nparts
     !! Array dimension of this attribute
     integer, intent(in) :: natt
     !! Attribute values to set
@@ -812,6 +809,7 @@ contains
     ! locals
     integer :: i, j, field_idx
     integer :: dim, stat, phase
+    integer :: nparts
     real, dimension(:), pointer :: lvx, lvy, lvz
     real, dimension(0), target :: zero
     type(scalar_field), pointer :: sfield
@@ -820,7 +818,8 @@ contains
     real, allocatable, dimension(:,:) :: field_vals, old_field_vals
     type(detector_type), pointer :: particle
 
-    dim = size(positions(:,1))
+    nparts = size(attributes, 2)
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
@@ -866,14 +865,12 @@ contains
 
   !> Given the particle position and time, evaluate the specified python function for a group of particles
   !! specified in the string func at that location.
-  subroutine set_particle_vector_attribute_from_python(attributes, positions, nparts, natt, func, time, dt, is_array)
+  subroutine set_particle_vector_attribute_from_python(attributes, positions, natt, func, time, dt, is_array)
     !! Attribute values to set
     real, dimension(:,:), intent(out) :: attributes
     !! Current particle positions
     real, dimension(:,:), target, intent(in) :: positions
-    !! Number of particles
-    integer, intent(in) :: nparts
-    !! Array dimension of htis attribute
+    !! Array dimension of this attribute
     integer, intent(in) :: natt
     !! Func may contain any python at all but the following function must
     !! be defined::
@@ -891,7 +888,7 @@ contains
     real, dimension(0), target :: zero
     integer :: stat, dim
 
-    dim = size(positions(:,1))
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
@@ -910,10 +907,10 @@ contains
     if (is_array) then
       ! call interface with additional array dimension argumetn
       call set_vector_particles_from_python(func, len(func), dim, &
-            nparts, natt, lvx, lvy, lvz, time, dt, attributes, stat)
+            size(attributes,2), natt, lvx, lvy, lvz, time, dt, attributes, stat)
     else
       call set_vector_particles_from_python(func, len(func), dim, &
-            nparts, lvx, lvy, lvz, time, dt, attributes, stat)
+            size(attributes,2), lvx, lvy, lvz, time, dt, attributes, stat)
     end if
     if (stat/=0) then
       ewrite(-1, *) "Python error, Python string was:"
@@ -924,7 +921,7 @@ contains
 
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
-  subroutine set_particle_vector_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
+  subroutine set_particle_vector_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, natt, &
        attributes, old_attr_names, old_attr_counts, old_attr_dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
@@ -937,8 +934,6 @@ contains
     real, dimension(:,:), intent(in) :: lcoords
     !! Elements containing particles
     integer, dimension(:), intent(in) :: ele
-    !! Number of particles
-    integer, intent(in) :: nparts
     !! Array dimnesion of this attribute
     integer, intent(in) :: natt
     !! Attribute values to set
@@ -976,6 +971,7 @@ contains
     ! locals
     integer :: i, j, field_idx
     integer :: dim, stat, phase
+    integer :: nparts
     real, dimension(:), pointer :: lvx, lvy, lvz
     real, dimension(0), target :: zero
     type(scalar_field), pointer :: sfield
@@ -984,7 +980,8 @@ contains
     real, allocatable, dimension(:,:) :: field_vals, old_field_vals
     type(detector_type), pointer :: particle
 
-    dim = size(positions(:,1))
+    nparts = size(attributes, 2)
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
@@ -1030,14 +1027,12 @@ contains
 
   !> Given the particle position and time, evaluate the specified python function for a group of particles
   !! specified in the string func at that location.
-  subroutine set_particle_tensor_attribute_from_python(attributes, positions, nparts, natt, func, time, dt, is_array)
+  subroutine set_particle_tensor_attribute_from_python(attributes, positions, natt, func, time, dt, is_array)
     !! Attribute values to set
     real, dimension(:,:), intent(inout) :: attributes
     !! Current particle positions
     real, dimension(:,:), target, intent(in) :: positions
-    !! Number of particles
-    integer, intent(in) :: nparts
-    !! Array dimension of htis attribute
+    !! Array dimension of this attribute
     integer, intent(in) :: natt
     !! Func may contain any python at all but the following function must
     !! be defined::
@@ -1055,10 +1050,11 @@ contains
     real, dimension(0), target :: zero
     real, dimension(:,:,:,:), allocatable :: tensor_res
     integer :: i, j, k, dim, idx
+    integer :: nparts
     integer :: stat
 
-    dim = size(positions(:,1))
-
+    nparts = size(attributes, 2)
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
@@ -1094,7 +1090,7 @@ contains
   end subroutine set_particle_tensor_attribute_from_python
   !> Given a particle position, time and field values, evaluate the python function
   !! specified in the string func at that location.
-  subroutine set_particle_tensor_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, nparts, natt, &
+  subroutine set_particle_tensor_attribute_from_python_fields(particle_list, state, positions, lcoords, ele, natt, &
        attributes, old_attr_names, old_attr_counts, old_attr_dims, old_attributes, field_names, field_counts, old_field_names, &
        old_field_counts, func, time, dt, is_array)
     !! Particle list for which to evaluate the function
@@ -1107,8 +1103,6 @@ contains
     real, dimension(:,:), intent(in) :: lcoords
     !! Elements containing particles
     integer, dimension(:), intent(in) :: ele
-    !! Number of particles
-    integer, intent(in) :: nparts
     !! Array dimension of this attribute
     integer, intent(in) :: natt
     !! Attribute values to set
@@ -1146,6 +1140,7 @@ contains
     ! locals
     integer :: i, j, field_idx
     integer :: dim, stat, phase
+    integer :: nparts
     real, dimension(:), pointer :: lvx, lvy, lvz
     real, dimension(0), target :: zero
     type(scalar_field), pointer :: sfield
@@ -1155,7 +1150,8 @@ contains
     type(detector_type), pointer :: particle
     real, dimension(:,:,:,:), allocatable :: tensor_res
 
-    dim = size(positions(:,1))
+    nparts = size(attributes, 2)
+    dim = size(positions, 1)
     select case(dim)
     case(1)
       lvx=>positions(1,:)
