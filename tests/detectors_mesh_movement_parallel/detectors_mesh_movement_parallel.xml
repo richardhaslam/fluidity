@@ -17,29 +17,29 @@ solvers_converged = not "matrixdump" in files and not "matrixdump.info" in files
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D1_ids'])
+det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D1%ids'])
 D1_position = np.vstack([f['/Step#0/{}'.format(dim)][det_id[0]] for dim in ('x', 'y')])
     </variable>
     <variable name="D2_position" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D2_ids'])
+det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D2%ids'])
 D2_position = np.vstack([f['/Step#0/{}'.format(dim)][det_id[0]] for dim in ('x', 'y')])
     </variable>
     <variable name="D1_tracer" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D1_ids'])
-D1_tracer = f['/Step#0/Water_Tracer'][det_id[0]]
+det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D1%ids'])
+D1_tracer = f['/Step#0/Water%Tracer'][det_id[0]]
     </variable>
     <variable name="D2_tracer" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D2_ids'])
-D2_tracer = f['/Step#0/Water_Tracer'][det_id[0]]
+det_id, = np.where(f['/Step#0/id'][:] == f.attrs['D2%ids'])
+D2_tracer = f['/Step#0/Water%Tracer'][det_id[0]]
     </variable>
   </variables>
   <pass_tests>
@@ -47,7 +47,7 @@ D2_tracer = f['/Step#0/Water_Tracer'][det_id[0]]
       assert(solvers_converged)
     </test>
     <test name="D1 final position" language="python">
-assert abs(D1_position[0,:] - 0.1).all() &lt; 1e-12
+assert abs(D1_position[0,:] - 0.0).all() &lt; 1e-12
     </test>
     <test name="D2 final position" language="python">
 assert abs(D2_position[0,:] - 0.25).all() &lt; 1e-12

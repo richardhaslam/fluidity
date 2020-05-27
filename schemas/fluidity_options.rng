@@ -342,59 +342,61 @@ and deleting options.</a:documentation>
                 <attribute name="name">
                   <data type="string"/>
                 </attribute>
-                <element name="particle_io">
-                  <optional>
-                    <choice>
-                      <element name="dump_period">
-                        <a:documentation>Period between dumps in time units.</a:documentation>
-                        <choice>
-                          <element name="constant">
-                            <ref name="real"/>
-                          </element>
-                          <element name="python">
-                            <a:documentation>Python function prescribing real input. Functions should be of the form:
+                <optional>
+                  <element name="particle_io">
+                    <optional>
+                      <choice>
+                        <element name="dump_period">
+                          <a:documentation>Period between dumps in time units.</a:documentation>
+                          <choice>
+                            <element name="constant">
+                              <ref name="real"/>
+                            </element>
+                            <element name="python">
+                              <a:documentation>Python function prescribing real input. Functions should be of the form:
 
  def val(t):
     # Function code
     return # Return value
 </a:documentation>
-                            <ref name="python_code"/>
-                          </element>
-                        </choice>
-                      </element>
-                      <element name="dump_period_in_timesteps">
-                        <a:documentation>Dump period, in timesteps.</a:documentation>
-                        <choice>
-                          <element name="constant">
-                            <ref name="integer"/>
-                          </element>
-                          <element name="python">
-                            <a:documentation>Python function prescribing integer input. Functions should be of the form:
+                              <ref name="python_code"/>
+                            </element>
+                          </choice>
+                        </element>
+                        <element name="dump_period_in_timesteps">
+                          <a:documentation>Dump period, in timesteps.</a:documentation>
+                          <choice>
+                            <element name="constant">
+                              <ref name="integer"/>
+                            </element>
+                            <element name="python">
+                              <a:documentation>Python function prescribing integer input. Functions should be of the form:
 
  def val(t):
     # Function code
     return # Return value
 </a:documentation>
-                            <ref name="python_code"/>
-                          </element>
-                        </choice>
+                              <ref name="python_code"/>
+                            </element>
+                          </choice>
+                        </element>
+                      </choice>
+                    </optional>
+                    <optional>
+                      <!-- every CPUDUM seconds write results to disc. -->
+                      <element name="cpu_dump_period">
+                        <a:documentation>This is usually disabled.</a:documentation>
+                        <ref name="real"/>
                       </element>
-                    </choice>
-                  </optional>
-                  <optional>
-                    <!-- every CPUDUM seconds write results to disc. -->
-                    <element name="cpu_dump_period">
-                      <a:documentation>This is usually disabled.</a:documentation>
-                      <ref name="real"/>
-                    </element>
-                  </optional>
-                  <optional>
-                    <element name="wall_time_dump_period">
-                      <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
-                      <ref name="real"/>
-                    </element>
-                  </optional>
-                </element>
+                    </optional>
+                    <optional>
+                      <element name="wall_time_dump_period">
+                        <a:documentation>The period between dumps in walltime seconds. This is usually disabled.</a:documentation>
+                        <ref name="real"/>
+                      </element>
+                    </optional>
+                  </element>
+                </optional>
                 <optional>
                   <element name="particle_spawning">
                     <a:documentation>Options for spawning and deleting particles based on the minimum and maximum limits of particles per control volume. Defined per particle_group.</a:documentation>
@@ -494,15 +496,15 @@ The t argument is for future use only - currently particle locations are only se
                               <attribute name="name">
                                 <data type="string"/>
                               </attribute>
+                              <element name="dimension">
+                                <ref name="integer"/>
+                              </element>
                               <optional>
                                 <element name="exclude_from_output">
                                   <a:documentation>Do not output this attribute to file</a:documentation>
                                   <empty/>
                                 </element>
                               </optional>
-                              <element name="dimension">
-                                <ref name="integer"/>
-                              </element>
                               <ref name="generic_scalar_particle_attribute_choice"/>
                             </element>
                             <element name="vector_attribute">
@@ -523,15 +525,15 @@ The t argument is for future use only - currently particle locations are only se
                               <attribute name="name">
                                 <data type="string"/>
                               </attribute>
+                              <element name="dimension">
+                                <ref name="integer"/>
+                              </element>
                               <optional>
                                 <element name="exclude_from_output">
                                   <a:documentation>Do not output this attribute to file</a:documentation>
                                   <empty/>
                                 </element>
                               </optional>
-                              <element name="dimension">
-                                <ref name="integer"/>
-                              </element>
                               <ref name="generic_vector_particle_attribute_choice"/>
                             </element>
                             <element name="tensor_attribute">
@@ -552,15 +554,15 @@ The t argument is for future use only - currently particle locations are only se
                               <attribute name="name">
                                 <data type="string"/>
                               </attribute>
+                              <element name="dimension">
+                                <ref name="integer"/>
+                              </element>
                               <optional>
                                 <element name="exclude_from_output">
                                   <a:documentation>Do not output this attribute to file</a:documentation>
                                   <empty/>
                                 </element>
                               </optional>
-                              <element name="dimension">
-                                <ref name="integer"/>
-                              </element>
                               <ref name="generic_tensor_particle_attribute_choice"/>
                             </element>
                           </choice>
@@ -4897,12 +4899,6 @@ where X is a tuple of length geometry dimension.</a:documentation>
         <attribute name="file_name">
           <data type="string"/>
         </attribute>
-        <element name="format">
-          <a:documentation>The format of the input file containing field data.</a:documentation>
-          <element name="string_value">
-            <value>binary</value>
-          </element>
-        </element>
       </element>
     </choice>
   </define>
@@ -4919,7 +4915,7 @@ where X is a tuple of length geometry dimension.</a:documentation>
     # Function code
     return # Return value
 
-where X is a tuple of length geometry dimension.</a:documentation>
+where X and the return value are tuples of length geometry dimension.</a:documentation>
         <ref name="python_code"/>
       </element>
       <element name="python_fields">
@@ -4929,7 +4925,7 @@ where X is a tuple of length geometry dimension.</a:documentation>
     # Function code
     return # Return value
 
- where X is a tuple of length geometry dimension.
+ where X and the return value are tuples of length geometry dimension.
 
  E.g. if Velocity field and positions vector are required
  def val (X, t, dt, fields):
@@ -4973,7 +4969,8 @@ where X is a tuple of length geometry dimension.</a:documentation>
     # Function code
     return # Return value
 
-where X is a tuple of length geometry dimension.</a:documentation>
+where X is a tuple of length geometry dimension and the return value
+is a (dim x dim) numpy array or list of lists.</a:documentation>
         <ref name="python_code"/>
       </element>
       <element name="python_fields">
@@ -4983,7 +4980,8 @@ where X is a tuple of length geometry dimension.</a:documentation>
     # Function code
     return # Return value
 
- where X is a tuple of length geometry dimension.
+ where X is a tuple of length geometry dimension and the return value
+ is a (dim x dim) numpy array or list of lists.
 
  E.g. to calculate a tensor based off position and velocity:
  def val (X, t, dt, fields):

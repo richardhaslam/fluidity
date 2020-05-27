@@ -325,7 +325,7 @@ start =
                       element wall_time_dump_period {
                           real
                       }?
-		  },
+		  }?,
                   ## Options for spawning and deleting particles based on the minimum and maximum limits of particles per control volume. Defined per particle_group.
 		  element particle_spawning {
 		     ## Set the mesh which will be used for particle spawning. Currently only works for a P1CV mesh!
@@ -406,13 +406,13 @@ start =
 			      ##Scalar particle attribute array.
 			      element scalar_attribute_array {
                                  attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
 				 ## Do not output this attribute to file
 				 element exclude_from_output {
 				     empty
 				 }?,
-				 element dimension {
-				    integer
-				 },
                                  generic_scalar_particle_attribute_choice
 			      }|
 			      ##Vector particle attribute.
@@ -427,13 +427,13 @@ start =
 			      ##Vector particle attribute array.
 			      element vector_attribute_array {
                                  attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
 				 ## Do not output this attribute to file
 				 element exclude_from_output {
 				     empty
 				 }?,
-				 element dimension {
-				    integer
-				 },
                                  generic_vector_particle_attribute_choice
 			      }|
 			      ##Tensor particle attribute.
@@ -448,13 +448,13 @@ start =
 			      ##Tensor particle attribute array.
 			      element tensor_attribute_array {
                                  attribute name { xsd:string },
+				 element dimension {
+				    integer
+				 },
 				 ## Do not output this attribute to file
 				 element exclude_from_output {
 				     empty
 				 }?,
-				 element dimension {
-				    integer
-				 },
                                  generic_tensor_particle_attribute_choice
 			      }
 			   )+
@@ -3802,13 +3802,7 @@ generic_scalar_particle_attribute_choice =
       }|
       ## File containing the particle positions in binary form
       element from_checkpoint_file {
-         attribute file_name { xsd:string },
-         ## The format of the input file containing field data.
-         element format {
-            element string_value {
-               "binary"
-            }
-         }
+         attribute file_name { xsd:string }
       }
    )
 
@@ -3824,7 +3818,7 @@ generic_vector_particle_attribute_choice =
       ##     # Function code
       ##     return # Return value
       ##
-      ## where X is a tuple of length geometry dimension.
+      ## where X and the return value are tuples of length geometry dimension.
       element python {
          python_code
       }|
@@ -3834,7 +3828,7 @@ generic_vector_particle_attribute_choice =
       ##     # Function code
       ##     return # Return value
       ##
-      ##  where X is a tuple of length geometry dimension.
+      ##  where X and the return value are tuples of length geometry dimension.
       ##
       ##  E.g. if Velocity field and positions vector are required
       ##  def val (X, t, dt, fields):
@@ -3874,7 +3868,8 @@ generic_tensor_particle_attribute_choice =
       ##     # Function code
       ##     return # Return value
       ##
-      ## where X is a tuple of length geometry dimension.
+      ## where X is a tuple of length geometry dimension and the return value
+      ## is a (dim x dim) numpy array or list of lists.
       element python {
          python_code
       }|
@@ -3884,7 +3879,8 @@ generic_tensor_particle_attribute_choice =
       ##     # Function code
       ##     return # Return value
       ##
-      ##  where X is a tuple of length geometry dimension.
+      ##  where X is a tuple of length geometry dimension and the return value
+      ##  is a (dim x dim) numpy array or list of lists.
       ##
       ##  E.g. to calculate a tensor based off position and velocity:
       ##  def val (X, t, dt, fields):

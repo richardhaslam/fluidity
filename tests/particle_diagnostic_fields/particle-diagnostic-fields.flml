@@ -110,7 +110,7 @@
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
   if (t!=0):
-    if (abs(fields["Temperature"]-fields["OldTemperature"])&gt;0.00001):
+    if (abs(fields["Temperature"]-fields["old%Temperature"])&gt;0.00001):
       a = 1
     else:
       a = 0
@@ -183,7 +183,7 @@
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
   if (t!=0):
     x = X[0]
-    oldx = fields["OldXval"]
+    oldx = fields["old%Xval"]
     a=0
     if (x&gt;oldx):
       a = 1
@@ -199,7 +199,7 @@
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
   if (t!=0):
     y = X[1]
-    oldy = fields["OldYval"]
+    oldy = fields["old%Yval"]
     a=0
     if (y&gt;oldy):
       a = 1

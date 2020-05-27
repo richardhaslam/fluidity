@@ -98,7 +98,7 @@
           <scalar_attribute name="Dtchange">
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
-  oldDT = fields["OldDtVal"]
+  oldDT = fields["old%DtVal"]
   x = dt - oldDT
   return x</string_value>
             </python_fields>
@@ -158,6 +158,9 @@
         <detectors>
           <exclude_from_detectors/>
         </detectors>
+        <particles>
+          <exclude_from_particles/>
+        </particles>
       </prescribed>
     </vector_field>
   </material_phase>

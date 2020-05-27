@@ -98,9 +98,12 @@
             <dimension>
               <integer_value rank="0">10</integer_value>
             </dimension>
-            <constant>
-              <real_value rank="0">5</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt,n):
+  import numpy as np
+  r = np.arange(n)
+  return r</string_value>
+            </python>
           </scalar_attribute_array>
           <scalar_attribute_array name="ArrayFieldAttribute">
             <dimension>
@@ -109,16 +112,19 @@
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields,n):
   import numpy as np
-  return np.arange(n) + fields["scaltest"]</string_value>
+  return np.arange(n) + fields["tenstest"][1,1]</string_value>
             </python_fields>
           </scalar_attribute_array>
           <vector_attribute_array name="VectorArrayAttribute">
             <dimension>
               <integer_value rank="0">10</integer_value>
             </dimension>
-            <constant>
-              <real_value rank="1" dim1="dim" shape="2">0 1</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt,n):
+  import numpy as np
+  r = np.arange(n)
+  return np.zeros((n,2)) + r[:,None]</string_value>
+            </python>
           </vector_attribute_array>
           <vector_attribute_array name="VectorFieldAttribute">
             <dimension>
@@ -127,16 +133,19 @@
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields,n):
   import numpy as np
-  return np.arange(n)[:,None] + fields["vectest"]</string_value>
+  return np.zeros((n,2)) + np.arange(n)[:,None] + fields["vectest"][1]</string_value>
             </python_fields>
           </vector_attribute_array>
           <tensor_attribute_array name="TensorArrayAttribute">
             <dimension>
               <integer_value rank="0">10</integer_value>
             </dimension>
-            <constant>
-              <real_value symmetric="false" rank="2" dim1="dim" dim2="dim" shape="2 2">0 1 2 3</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt,n):
+  import numpy as np
+  r = np.arange(n)
+  return np.zeros((n,2,2)) + r[:,None,None]</string_value>
+            </python>
           </tensor_attribute_array>
           <tensor_attribute_array name="TensorFieldAttribute">
             <dimension>
@@ -145,17 +154,9 @@
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields,n):
   import numpy as np
-  return np.arange(n)[:,None,None] + fields["tenstest"]</string_value>
-              <store_old_attribute/>
+  return np.zeros((n,2,2)) + np.arange(n)[:,None,None] + fields["tenstest"]</string_value>
             </python_fields>
           </tensor_attribute_array>
-          <vector_attribute name="test">
-            <python_fields>
-              <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
-  import numpy as np
-  return np.zeros(2) + fields["vectest"] + fields["OldTensorFieldAttribute"][0,0,0]</string_value>
-            </python_fields>
-          </vector_attribute>
         </attributes>
       </particle_subgroup>
     </particle_group>
@@ -186,45 +187,49 @@
         </initial_position>
         <attributes>
           <scalar_attribute name="ScalarAttribute">
-            <constant>
-              <real_value rank="0">5</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt):
+  return 1</string_value>
+            </python>
           </scalar_attribute>
           <scalar_attribute name="ScalarFieldAttribute">
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
-  return fields["scaltest"]</string_value>
+  return fields["Temperature"]</string_value>
             </python_fields>
           </scalar_attribute>
           <vector_attribute name="VectorAttribute">
-            <constant>
-              <real_value rank="1" dim1="dim" shape="2">0 1</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt):
+  import numpy as np
+  return np.random.rand(2)</string_value>
+            </python>
           </vector_attribute>
           <vector_attribute name="VectorFieldAttribute">
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
   import numpy as np
-  return np.zeros(2) + fields["vectest"]</string_value>
+  return np.random.rand(2) + fields["Temperature"]</string_value>
             </python_fields>
           </vector_attribute>
           <tensor_attribute name="TensorAttribute">
-            <constant>
-              <real_value symmetric="false" rank="2" dim1="dim" dim2="dim" shape="2 2">0 1 2 3</real_value>
-            </constant>
+            <python>
+              <string_value type="code" language="python" lines="20">def val(X,t,dt):
+  import numpy as np
+  return np.random.rand(2,2)</string_value>
+            </python>
           </tensor_attribute>
           <tensor_attribute name="TensorFieldAttribute">
             <python_fields>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,fields):
   import numpy as np
-  return np.zeros((2,2)) + fields["tenstest"]</string_value>
+  return np.random.rand(2,2) + fields["Temperature"]</string_value>
             </python_fields>
           </tensor_attribute>
         </attributes>
       </particle_subgroup>
     </particle_group>
     <particle_group name="ComputeOnly">
-      <particle_io/>
       <particle_subgroup name="Strain">
         <number_of_particles>
           <integer_value rank="0">10</integer_value>
@@ -241,6 +246,7 @@
             <dimension>
               <integer_value rank="0">10</integer_value>
             </dimension>
+            <exclude_from_output/>
             <python>
               <string_value type="code" language="python" lines="20">def val(X,t,dt,n):
   import numpy as np
@@ -282,7 +288,9 @@
         <value name="WholeMesh">
           <python>
             <string_value type="code" language="python" lines="20">def val(X,t):
-  return [0,0]</string_value>
+  x = X[0]
+  y = X[1]
+  return [-(y-0.5)/2.0,(x-0.5)/2.0]</string_value>
           </python>
         </value>
         <output/>
@@ -425,24 +433,6 @@
           <include_in_steady_state/>
         </steady_state>
       </diagnostic>
-    </scalar_field>
-    <scalar_field rank="0" name="scaltest">
-      <prescribed>
-        <mesh name="CoordinateMesh"/>
-        <value name="WholeMesh">
-          <constant>
-            <real_value rank="0">3</real_value>
-          </constant>
-        </value>
-        <output/>
-        <stat/>
-        <detectors>
-          <exclude_from_detectors/>
-        </detectors>
-        <particles>
-          <include_in_particles/>
-        </particles>
-      </prescribed>
     </scalar_field>
     <vector_field rank="1" name="vectest">
       <prescribed>

@@ -26,7 +26,6 @@
 
 #include "fdebug.h"
 #include "version.h"
-#include "H5hut.f90"
 
 module diagnostic_variables
   !!< A module to calculate and output diagnostics. This replaces the .s file.
@@ -79,10 +78,11 @@ module diagnostic_variables
   use mixing_statistics
   use detector_tools
   use detector_parallel
-  use h5hut
   use particles, only: get_particle_arrays
   use state_fields_module
-  
+
+  use H5hut
+
   implicit none
 
   interface
@@ -1763,7 +1763,7 @@ contains
        ! construct the list of ids in the same way as they
        ! are initialised above
        h5_ierror = h5_writefileattrib_i4(default_stat%detector_list%h5_id, &
-            trim(default_stat%detector_group_names(i)) // "_ids", &
+            trim(default_stat%detector_group_names(i)) // "%ids", &
             [(j, j=k, k+group_size-1)], int(group_size, 8))
 
        if (h5_ierror /= 0) print *, "Error writing file attributes"
@@ -2630,7 +2630,7 @@ contains
 
              ! write this field to file
              h5_ierror = h5pt_writedata_r8(detector_list%h5_id, &
-                  trim(state(phase)%name) // "_" // trim(detector_list%sfield_list(phase)%ptr(i)), &
+                  trim(state(phase)%name) // "%" // trim(detector_list%sfield_list(phase)%ptr(i)), &
                   detector_scalar_values(:))
            end do
 
@@ -2664,22 +2664,22 @@ contains
                detector => detector%next
              end do
 
-             vfield_name = trim(state(phase)%name) // "_" // trim(detector_list%vfield_list(phase)%ptr(i))
+             vfield_name = trim(state(phase)%name) // "%" // trim(detector_list%vfield_list(phase)%ptr(i))
 
              ! write this field
              if (vfield%dim >= 1) then
                h5_ierror = h5pt_writedata_r8(detector_list%h5_id, &
-                    trim(vfield_name) // "_x", &
+                    trim(vfield_name) // "%x", &
                     detector_vector_values(:,1))
              end if
              if (vfield%dim >= 2) then
                h5_ierror = h5pt_writedata_r8(detector_list%h5_id, &
-                    trim(vfield_name) // "_y", &
+                    trim(vfield_name) // "%y", &
                     detector_vector_values(:,2))
              end if
              if (vfield%dim >= 3) then
                h5_ierror = h5pt_writedata_r8(detector_list%h5_id, &
-                    trim(vfield_name) // "_z", &
+                    trim(vfield_name) // "%z", &
                     detector_vector_values(:,3))
              end if
 

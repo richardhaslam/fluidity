@@ -70,15 +70,15 @@ integral_tracer_dg_9 = stat("landslide_benchmark.stat")["Water"]["TracerP1DG"]["
     <variable name="region_id_1" language="python">
 import h5py
 f = h5py.File('landslide_benchmark.detectors.h5part', 'r')
-region_id_1 = f['/Step#0/Water_RegionIDs'][0]</variable>
+region_id_1 = f['/Step#0/Water%RegionIDs'][0]</variable>
     <variable name="region_id_2" language="python">
 import h5py
 f = h5py.File('landslide_benchmark.detectors.h5part', 'r')
-region_id_2 = f['/Step#0/Water_RegionIDs'][1]</variable>
+region_id_2 = f['/Step#0/Water%RegionIDs'][1]</variable>
     <variable name="region_id_3" language="python">
 import h5py
 f = h5py.File('landslide_benchmark.detectors.h5part', 'r')
-region_id_3 = f['/Step#0/Water_RegionIDs'][2]</variable>
+region_id_3 = f['/Step#0/Water%RegionIDs'][2]</variable>
   </variables>
   <pass_tests>
     <test name="Solvers converged" language="python">

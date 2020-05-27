@@ -14,8 +14,8 @@ solvers_converged = not "matrixdump" in files and not "matrixdump.info" in files
 import h5py
 import numpy as np
 f = h5py.File('standing_wave.detectors.h5part', 'r')
-lt_id = f.attrs['Left_ids'][0] - 1
-fsl = np.array([f['/Step#{}/Water_FreeSurface'.format(i)][lt_id] for i in range(len(f))])
+lt_id = f.attrs['Left%ids'][0] - 1
+fsl = np.array([f['/Step#{}/Water%FreeSurface'.format(i)][lt_id] for i in range(len(f))])
 t = np.array([f['/Step#{}'.format(i)].attrs['time'][0] for i in range(len(f))])
 fs_left={}
 fs_left['min']=fsl.min()
@@ -25,8 +25,8 @@ fs_left['end_value']=fsl[-1]</variable>
 import h5py
 import numpy as np
 f = h5py.File('standing_wave.detectors.h5part', 'r')
-rt_id = f.attrs['Right_ids'][0] - 1
-fsr = np.array([f['/Step#{}/Water_FreeSurface'.format(i)][rt_id] for i in range(len(f))])
+rt_id = f.attrs['Right%ids'][0] - 1
+fsr = np.array([f['/Step#{}/Water%FreeSurface'.format(i)][rt_id] for i in range(len(f))])
 t = np.array([f['/Step#{}'.format(i)].attrs['time'][0] for i in range(len(f))])
 fs_right={}
 fs_right['max']=fsr.max()

@@ -11,185 +11,117 @@ mpiexec ../../bin/fluidity -v3 -l particle-attribute-array-flredecomp.flml
     </command_line>
   </problem_definition>
   <variables>
-    <variable name="scalar_constant_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['ScalarAttribute'][:]
-scal_error = np.sqrt((att_1 - 5.0)**2)
-scalar_constant_error=abs(scal_error).max()
-
-print ("max error",scalar_constant_error)
-    </variable>
-    <variable name="scalar_field_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['ScalarFieldAttribute'][:]
-scal_error = np.sqrt((att_1 - 3.0)**2)
-scalar_field_error=abs(scal_error).max()
-
-print ("max error",scalar_field_error)
-    </variable>
-    <variable name="vector_constant_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['VectorAttribute_0'][:]
-att_2 = d['VectorAttribute_1'][:]
-vec_error = np.sqrt((att_1 - 0.0)**2+(att_2-1.0)**2)
-vector_constant_error=abs(vec_error).max()
-
-print ("max error",vector_constant_error)
-    </variable>
-    <variable name="vector_field_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['VectorFieldAttribute_0'][:]
-att_2 = d['VectorFieldAttribute_1'][:]
-vec_error = np.sqrt((att_1 - 1.0)**2+(att_2-2.0)**2)
-vector_field_error=abs(vec_error).max()
-
-print ("max error",vector_field_error)
-    </variable>
-    <variable name="tensor_constant_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['TensorAttribute_0'][:]
-att_2 = d['TensorAttribute_1'][:]
-att_3 = d['TensorAttribute_2'][:]
-att_4 = d['TensorAttribute_3'][:]
-ten_error = np.sqrt((att_1 - 0.0)**2+(att_2 - 1.0)**2+(att_3 - 2.0)**2+(att_4 - 3.0)**2)
-tensor_constant_error=abs(ten_error).max()
-
-print ("max error",tensor_constant_error)
-    </variable>
-    <variable name="tensor_field_error" language="python">
-import numpy as np
-import h5py
-
-f = h5py.File('particle_attributes.particles.Attributes.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = d['TensorFieldAttribute_0'][:]
-att_2 = d['TensorFieldAttribute_1'][:]
-att_3 = d['TensorFieldAttribute_2'][:]
-att_4 = d['TensorFieldAttribute_3'][:]
-ten_error = np.sqrt((att_1 - 1.0)**2+(att_2 - 2.0)**2+(att_3 - 3.0)**2+(att_4 - 4.0)**2)
-tensor_field_error=abs(ten_error).max()
-
-print ("max error",tensor_field_error)
-    </variable>
-        <variable name="scalar_constant_array_error" language="python">
+    <variable name="array_error_1" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att=np.zeros((10,1000))
-scal_error=np.zeros((10,1000))
-for i in range(0,10):
-   att[i,:] = d['ArrayAttribute'+str(i+1)][:]
-   scal_error[i,:] = np.sqrt((att[i,:]-5.0)**2)
-scalar_constant_array_error=abs(scal_error).max()
-print ("max error",scalar_constant_array_error)
+n = len(f)-1
+array = np.zeros((10,966))
+array_error = np.zeros((10,966))
+for i in range (0,10):
+   array[i,:] = f[f'/Step#{n}/ArrayAttribute'+str(i+1)][:]
+   array_error[i,:] =  np.sqrt((array[i,:]-i)**2)
+
+array_error_1=abs(array_error).max()
+
+print ("max error",array_error_1)
     </variable>
-    <variable name="scalar_field_array_error" language="python">
+    <variable name="array_error_2" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att=np.zeros((5,1000))
-scal_error=np.zeros((5,1000))
-for i in range(0,5):
-   att[i,:] = d['ArrayFieldAttribute'+str(i+1)][:]
-   scal_error[i,:] = np.sqrt((att[i,:] - (3.0+i))**2)
-scalar_field_array_error=abs(scal_error).max()
-print ("max error",scalar_field_array_error)
+n = len(f)-1
+array = np.zeros((5,966))
+array_error = np.zeros((5,966))
+for i in range (0,5):
+   array[i,:] = f[f'/Step#{n}/ArrayFieldAttribute'+str(i+1)][:]
+   array_error[i,:] =  np.sqrt((array[i,:]-i-4)**2)
+
+array_error_2=abs(array_error).max()
+
+print ("max error",array_error_2)
     </variable>
-    <variable name="vector_constant_array_error" language="python">
+    <variable name="array_error_3" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = np.zeros((10,1000))
-att_2 = np.zeros((10,1000))
-vec_error = np.zeros((10,1000))
-for i in range(0,10):
-   att_1[i,:] = d['VectorArrayAttribute'+str(i+1)+'_0'][:]
-   att_2[i,:] = d['VectorArrayAttribute'+str(i+1)+'_1'][:]
-   vec_error[i,:] = np.sqrt((att_1[i,:]-0.0)**2+(att_2[i,:]-1.0)**2)
-vector_constant_array_error=abs(vec_error).max()
-print ("max error",vector_constant_array_error)
+n = len(f)-1
+array1 = np.zeros((10,966))
+array2 = np.zeros((10,966))
+array_error = np.zeros((10,966))
+for i in range (0,10):
+   array1[i,:] = f[f'/Step#{n}/VectorArrayAttribute'+str(i+1)+'_0'][:]
+   array2[i,:] = f[f'/Step#{n}/VectorArrayAttribute'+str(i+1)+'_1'][:]
+   array_error[i,:] = np.sqrt((array1[i,:]-i)**2+(array2[i,:]-i)**2)
+
+array_error_3=abs(array_error).max()
+
+print ("max error",array_error_3)
     </variable>
-    <variable name="vector_field_array_error" language="python">
+    <variable name="array_error_4" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = np.zeros((5,1000))
-att_2 = np.zeros((5,1000))
-vec_error = np.zeros((5,1000))
-for i in range(0,5):
-   att_1[i,:] = d['VectorFieldAttribute'+str(i+1)+'_0'][:]
-   att_2[i,:] = d['VectorFieldAttribute'+str(i+1)+'_1'][:]
-   vec_error[i,:] = np.sqrt((att_1[i,:] - (1.0+i))**2+(att_2[i,:]-(2.0+i))**2)
-vector_field_array_error=abs(vec_error).max()
-print ("max error",vector_field_array_error)
+n = len(f)-1
+array1 = np.zeros((5,966))
+array2 = np.zeros((5,966))
+array_error = np.zeros((5,966))
+for i in range (0,5):
+   array1[i,:] = f[f'/Step#{n}/VectorFieldAttribute'+str(i+1)+'_0'][:]
+   array2[i,:] = f[f'/Step#{n}/VectorFieldAttribute'+str(i+1)+'_1'][:]
+   array_error[i,:] = np.sqrt((array1[i,:]-i-2)**2+(array2[i,:]-i-2)**2)
+
+array_error_4=abs(array_error).max()
+
+print ("max error",array_error_4)
     </variable>
-    <variable name="tensor_constant_array_error" language="python">
+    <variable name="array_error_5" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = np.zeros((10,1000))
-att_2 = np.zeros((10,1000))
-att_3 = np.zeros((10,1000))
-att_4 = np.zeros((10,1000))
-ten_error = np.zeros((10,1000))
-for i in range(0,10):
-   att_1[i,:] = d['TensorArrayAttribute'+str(i+1)+'_0'][:]
-   att_2[i,:] = d['TensorArrayAttribute'+str(i+1)+'_1'][:]
-   att_3[i,:] = d['TensorArrayAttribute'+str(i+1)+'_2'][:]
-   att_4[i,:] = d['TensorArrayAttribute'+str(i+1)+'_3'][:]
-   ten_error[i,:] = np.sqrt((att_1[i,:] - 0.0)**2+(att_2[i,:] - 1.0)**2+(att_3[i,:] - 2.0)**2+(att_4[i,:] - 3.0)**2)
-tensor_constant_array_error=abs(ten_error).max()
-print ("max error",tensor_constant_array_error)
+n = len(f)-1
+array1 = np.zeros((10,966))
+array2 = np.zeros((10,966))
+array3 = np.zeros((10,966))
+array4 = np.zeros((10,966))
+array_error = np.zeros((10,966))
+for i in range (0,10):
+   array1[i,:] = f[f'/Step#{n}/TensorArrayAttribute'+str(i+1)+'_0'][:]
+   array2[i,:] = f[f'/Step#{n}/TensorArrayAttribute'+str(i+1)+'_1'][:]
+   array3[i,:] = f[f'/Step#{n}/TensorArrayAttribute'+str(i+1)+'_2'][:]
+   array4[i,:] = f[f'/Step#{n}/TensorArrayAttribute'+str(i+1)+'_3'][:]
+   array_error[i,:] = np.sqrt((array1[i,:]-i)**2+(array2[i,:]-i)**2+(array3[i,:]-i)**2+(array4[i,:]-i)**2)
+
+array_error_5=abs(array_error).max()
+
+print ("max error",array_error_5)
     </variable>
-    <variable name="tensor_field_array_error" language="python">
+    <variable name="array_error_6" language="python">
 import numpy as np
 import h5py
 
 f = h5py.File('particle_attributes.particles.ArrayMeasure.h5part', 'r')
-d = f['/Step#{}'.format(len(f)-1)]
-att_1 = np.zeros((5,1000))
-att_2 = np.zeros((5,1000))
-att_3 = np.zeros((5,1000))
-att_4 = np.zeros((5,1000))
-ten_error = np.zeros((5,1000))
-for i in range(0,5):
-   att_1[i,:] = d['TensorFieldAttribute'+str(i+1)+'_0'][:]
-   att_2[i,:] = d['TensorFieldAttribute'+str(i+1)+'_1'][:]
-   att_3[i,:] = d['TensorFieldAttribute'+str(i+1)+'_2'][:]
-   att_4[i,:] = d['TensorFieldAttribute'+str(i+1)+'_3'][:]
-   ten_error[i,:] = np.sqrt((att_1[i,:] - (1.0+i))**2+(att_2[i,:] - (2.0+i))**2+(att_3[i,:] - (3.0+i))**2+(att_4[i,:] - (4.0+i))**2)
-tensor_field_array_error=abs(ten_error).max()
-print ("max error",tensor_field_array_error)
+n = len(f)-1
+array1 = np.zeros((5,966))
+array2 = np.zeros((5,966))
+array3 = np.zeros((5,966))
+array4 = np.zeros((5,966))
+array_error = np.zeros((5,966))
+for i in range (0,5):
+   array1[i,:] = f[f'/Step#{n}/TensorFieldAttribute'+str(i+1)+'_0'][:]
+   array2[i,:] = f[f'/Step#{n}/TensorFieldAttribute'+str(i+1)+'_1'][:]
+   array3[i,:] = f[f'/Step#{n}/TensorFieldAttribute'+str(i+1)+'_2'][:]
+   array4[i,:] = f[f'/Step#{n}/TensorFieldAttribute'+str(i+1)+'_3'][:]
+   array_error[i,:] = np.sqrt((array1[i,:]-i-1)**2+(array2[i,:]-i-2)**2+(array3[i,:]-i-3)**2+(array4[i,:]-i-4)**2)
+
+array_error_6=abs(array_error).max()
+
+print ("max error",array_error_6)
     </variable>
     <variable name="Walltime" language="python">
 from fluidity_tools import stat_parser
@@ -201,41 +133,23 @@ print ("Total wall time", Walltime)
     </variable>
   </variables>
   <pass_tests>
-    <test name="Maxscalarerror1" language="python">
-assert abs(scalar_constant_error).max() &lt; 1.0e-5
+    <test name="Maxarrayerror1" language="python">
+assert abs(array_error_1).max() &lt; 1.0e-5
     </test>
-    <test name="Maxscalarerror2" language="python">
-assert abs(scalar_field_error).max() &lt; 1.0e-5
+    <test name="Maxarrayerror2" language="python">
+assert abs(array_error_2).max() &lt; 1.0e-5
     </test>
-    <test name="Maxvectorerror1" language="python">
-assert abs(vector_constant_error).max() &lt; 1.0e-5
+    <test name="Maxarrayerror3" language="python">
+assert abs(array_error_3).max() &lt; 1.0e-5
     </test>
-    <test name="Maxvectorerror2" language="python">
-assert abs(vector_field_error).max() &lt; 1.0e-5
+    <test name="Maxarrayerror4" language="python">
+assert abs(array_error_4).max() &lt; 1.0e-5
     </test>
-    <test name="Maxtensorerror1" language="python">
-assert abs(tensor_constant_error).max() &lt; 1.0e-5
+    <test name="Maxarrayerror5" language="python">
+assert abs(array_error_5).max() &lt; 1.0e-5
     </test>
-    <test name="Maxtensorerror2" language="python">
-assert abs(tensor_field_error).max() &lt; 1.0e-5 
-    </test>
-    <test name="Maxscalararrayerror1" language="python">
-assert abs(scalar_constant_array_error).max() &lt; 1.0e-5
-    </test>
-    <test name="Maxscalararrayerror2" language="python">
-assert abs(scalar_field_array_error).max() &lt; 1.0e-5
-    </test>
-    <test name="Maxvectorarrayerror1" language="python">
-assert abs(vector_constant_array_error).max() &lt; 1.0e-5
-    </test>
-    <test name="Maxvectorarrayerror2" language="python">
-assert abs(vector_field_array_error).max() &lt; 1.0e-5
-    </test>
-    <test name="Maxtensorarrayerror1" language="python">
-assert abs(tensor_constant_array_error).max() &lt; 1.0e-5
-    </test>
-    <test name="Maxtensorarrayerror2" language="python">
-assert abs(tensor_field_array_error).max() &lt; 1.0e-5 
+    <test name="Maxarrayerror6" language="python">
+assert abs(array_error_6).max() &lt; 1.0e-5
     </test>
   </pass_tests>
   <warn_tests>

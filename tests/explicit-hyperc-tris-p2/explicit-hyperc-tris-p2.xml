@@ -32,26 +32,26 @@ mnvfrac = fluidity_tools.stat_parser("channel_flow.stat")['Water']['Tracer']['mi
     <variable name="tracerfarbehindfront" language="python">
 import h5py
 f = h5py.File('channel_flow.detectors.h5part', 'r')
-det_id = f.attrs['15a_ids'][0]-1
-tracerfarbehindfront = f['/Step#{}/Water_Tracer'.format(len(f)-1)][det_id]
+det_id = f.attrs['15a%ids'][0]-1
+tracerfarbehindfront = f['/Step#{}/Water%Tracer'.format(len(f)-1)][det_id]
     </variable>
     <variable name="tracerbehindfront" language="python">
 import h5py
 f = h5py.File('channel_flow.detectors.h5part', 'r')
-det_id = f.attrs['16_ids'][0]-1
-tracerbehindfront = f['/Step#{}/Water_Tracer'.format(len(f)-1)][det_id]
+det_id = f.attrs['16%ids'][0]-1
+tracerbehindfront = f['/Step#{}/Water%Tracer'.format(len(f)-1)][det_id]
     </variable>
      <variable name="tracerfrontfront" language="python">
 import h5py
 f = h5py.File('channel_flow.detectors.h5part', 'r')
-det_id = f.attrs['17_ids'][0]-1
-tracerfrontfront = f['/Step#{}/Water_Tracer'.format(len(f)-1)][det_id]
+det_id = f.attrs['17%ids'][0]-1
+tracerfrontfront = f['/Step#{}/Water%Tracer'.format(len(f)-1)][det_id]
     </variable>
      <variable name="tracerfarfrontfront" language="python">
 import h5py
 f = h5py.File('channel_flow.detectors.h5part', 'r')
-det_id = f.attrs['17a_ids'][0]-1
-tracerfarfrontfront = f['/Step#{}/Water_Tracer'.format(len(f)-1)][det_id]
+det_id = f.attrs['17a%ids'][0]-1
+tracerfarfrontfront = f['/Step#{}/Water%Tracer'.format(len(f)-1)][det_id]
     </variable>
     <variable name="mxvelocity" language="python">
 import fluidity_tools

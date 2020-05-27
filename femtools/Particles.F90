@@ -26,9 +26,6 @@
 !    USA
 #include "fdebug.h"
 
-include "H5hut.f90"
-
-
 module particles
   use fldebug
   use iso_c_binding, only: C_NULL_CHAR
@@ -117,16 +114,17 @@ contains
   end subroutine deallocate_attr_vals
 
   !> Initialise particles and set up particle file headers (per particle array)
-  subroutine initialise_particles(filename, state, global, from_flredecomp, number_of_partitions)
+  subroutine initialise_particles(filename, state, global, setup_output, ignore_analytical, number_of_partitions)
     !> Experiment filename to prefix particle output files
     character(len=*), intent(in) :: filename
     !> Model state structure
     type(state_type), dimension(:), intent(in) :: state
     !> Use global/parallel picker queries to determine particle elements?
     logical, intent(in), optional :: global
-    !> Whether we're being called by flredecomp, this changes behaviour around
-    !! parallel access to particle files
-    logical, intent(in), optional :: from_flredecomp
+    !> Whether to set up output files for particle lists
+    logical, intent(in), optional :: setup_output
+    !> Whether to ignore analytical particles (i.e. not from file)
+    logical, intent(in), optional :: ignore_analytical
     !> Number of processes to use for reading particle data
     integer, intent(in), optional :: number_of_partitions
 
@@ -141,7 +139,7 @@ contains
     integer :: dim, particle_groups, total_arrays, list_counter
     integer, dimension(:), allocatable :: particle_arrays
     integer :: totaldet_global
-    logical :: from_file, do_output, store_old_fields
+    logical :: from_file, do_output, do_analytical, store_old_fields
     integer :: n_fields, n_oldfields, phase, f
     integer :: s_field, v_field, t_field ! field index variables
     integer :: s_oldfield, v_oldfield, t_oldfield
@@ -160,10 +158,11 @@ contains
     character(len=*), dimension(3), parameter :: types = ["prescribed", "diagnostic", "prognostic"]
 
     ewrite(2,*) "In initialise_particles"
-    
-    ! If we're not being called from flredecomp, we'll set up particle output files
+
     do_output = .true.
-    if (present(from_flredecomp)) do_output = .not. from_flredecomp
+    if (present(setup_output)) do_output = setup_output
+    do_analytical = .true.
+    if (present(ignore_analytical)) do_analytical = .not. ignore_analytical
 
     ! Check whether there are any particle groups to initialise
     particle_groups = option_count("/particles/particle_group")
@@ -297,7 +296,7 @@ contains
           ! But if we're flredecomping, we don't want to handle
           ! particles with analytically-specified positions (i.e. not
           ! from a file)
-          if (present(from_flredecomp) .and. .not. from_file) cycle
+          if (.not. do_analytical .and. .not. from_file) cycle
 
           ! Set up the particle list structure
           call get_option(trim(subgroup_path) // "/number_of_particles", sub_particles)
@@ -420,7 +419,6 @@ contains
     deallocate(particle_arrays)
     call deallocate(field_names)
     call deallocate(old_field_names)
-    
   end subroutine initialise_particles
 
   !> Get the names and count of all attributes and old attributes for
@@ -471,8 +469,8 @@ contains
       to_write(i) = .not. have_option(trim(subkey)//"/exclude_from_output")
 
       if (have_option(trim(subkey)//"/python_fields/store_old_attribute")) then
-        ! prefix with "old_" to distinguish from current attribute
-        old_names(old_i) = "Old" // trim(names(i))
+        ! prefix with "old%" to distinguish from current attribute
+        old_names(old_i) = "old%" // trim(names(i))
         old_dims(old_i) = 0
         old_i = old_i + 1
       end if
@@ -750,7 +748,7 @@ contains
       ! batched reads of scalar, vector, tensor values of each kind of attribute
       call read_attrs(h5_id, dim, attr_counts%attrs, attr_names, attr_vals)
       call read_attrs(h5_id, dim, attr_counts%old_attrs, old_attr_names, old_attr_vals)
-      call read_attrs(h5_id, dim, attr_counts%old_fields, old_field_names, old_field_vals, prefix="Old")
+      call read_attrs(h5_id, dim, attr_counts%old_fields, old_field_names, old_field_vals, prefix="old%")
 
       ! don't use a global check for this particle
       call create_single_particle(p_list, xfield, &
@@ -813,7 +811,9 @@ contains
     type(attr_counts_type), intent(in) :: attr_counts
     !> If provided, initialise the particle's attributes directly
     type(attr_vals_type), intent(in), optional :: attr_vals, old_attr_vals, old_field_vals
-    !> Whether to use a global query for the element owning this particle
+    !> Whether to create this particle in a collective operation (true)
+    !! or for the local processor only (false).
+    !! This affects the inquiry of the element owning the particle
     logical, intent(in), optional :: global
     !> Dummy counter for particle number. Removes issues when reading from checkpoint with spawning/deleting
     integer, intent(in), optional :: particle_number
@@ -1233,7 +1233,7 @@ contains
     ! we also allocate the array of old attribute dims here
     call copy_names_to_array(p_list%old_attr_names, old_attr_names, old_attr_counts, old_attr_dims)
     call copy_names_to_array(p_list%field_names, field_names, field_counts)
-    call copy_names_to_array(p_list%old_field_names, old_field_names, old_field_counts, prefix="Old")
+    call copy_names_to_array(p_list%old_field_names, old_field_names, old_field_counts, prefix="old%")
 
     call get_option("/geometry/dimension", dim)
     allocate(vconstant(dim))
@@ -1287,13 +1287,12 @@ contains
         call get_option(trim(attr_key)//'/python', func)
         call set_particle_scalar_attribute_from_python( &
              attribute_array(attr_idx:attr_idx+n-1,:), &
-             positions(:,:), nparticles, n, func, time, dt, is_array)
+             positions(:,:), n, func, time, dt, is_array)
 
       else if (have_option(trim(attr_key)//'/python_fields')) then
         call get_option(trim(attr_key)//'/python_fields', func)
         call set_particle_scalar_attribute_from_python_fields( &
-             p_list, state, positions(:,:), lcoords(:,:), ele(:), &
-             nparticles, n, &
+             p_list, state, positions(:,:), lcoords(:,:), ele(:), n, &
              attribute_array(attr_idx:attr_idx+n-1,:), &
              old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
              field_names, field_counts, old_field_names, old_field_counts, &
@@ -1327,21 +1326,18 @@ contains
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', vconstant)
         ! broadcast vector constant out to all particles
-        do j = 1,n
-           attribute_array(attr_idx+((j-1)*dim):attr_idx+j*dim-1,:) = spread(vconstant, 2, nparticles)
-        end do
+        attribute_array(attr_idx:attr_idx+n*dim-1,:) = spread(vconstant, 2, nparticles)
 
       else if (have_option(trim(attr_key)//'/python')) then
         call get_option(trim(attr_key)//'/python', func)
         call set_particle_vector_attribute_from_python( &
              attribute_array(attr_idx:attr_idx+n*dim-1,:), &
-             positions(:,:), nparticles, n, func, time, dt, is_array)
+             positions(:,:), n, func, time, dt, is_array)
 
       else if (have_option(trim(attr_key)//'/python_fields')) then
         call get_option(trim(attr_key)//'/python_fields', func)
         call set_particle_vector_attribute_from_python_fields( &
-             p_list, state, positions(:,:), lcoords(:,:), ele(:), &
-             nparticles, n, &
+             p_list, state, positions(:,:), lcoords(:,:), ele(:), n, &
              attribute_array(attr_idx:attr_idx+n*dim-1,:), &
              old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
              field_names, field_counts, old_field_names, old_field_counts, &
@@ -1375,21 +1371,18 @@ contains
       if (have_option(trim(attr_key)//'/constant')) then
         call get_option(trim(attr_key)//'/constant', tconstant)
         ! flatten tensor, then broadcast out to all particles
-        do j = 1,n
-           attribute_array(attr_idx+((j-1)*dim**2):attr_idx+j*dim**2-1,:) = spread(reshape(tconstant, [dim**2]), 2, nparticles)
-        end do
+        attribute_array(attr_idx:attr_idx+n*dim**2-1,:) = spread(reshape(tconstant, [dim**2]), 2, nparticles)
 
        else if (have_option(trim(attr_key)//'/python')) then
          call get_option(trim(attr_key)//'/python', func)
          call set_particle_tensor_attribute_from_python( &
               attribute_array(attr_idx:attr_idx + n*dim**2 - 1,:), &
-              positions(:,:), nparticles, n, func, time, dt, is_array)
+              positions(:,:), n, func, time, dt, is_array)
 
        else if (have_option(trim(attr_key)//'/python_fields')) then
          call get_option(trim(attr_key)//'/python_fields', func)
          call set_particle_tensor_attribute_from_python_fields( &
-              p_list, state, positions(:,:), lcoords(:,:), ele(:), &
-              nparticles, n, &
+              p_list, state, positions(:,:), lcoords(:,:), ele(:), n, &
               attribute_array(attr_idx:attr_idx + n*dim**2 - 1,:), &
               old_attr_names, old_attr_counts, old_attr_dims, old_attributes, &
               field_names, field_counts, old_field_names, old_field_counts, &
@@ -1826,7 +1819,6 @@ contains
        call mpi_comm_free(output_comm, ierr)
        call mpi_group_free(output_group, ierr)
      end if
-    
   end subroutine checkpoint_particles_loop
 
   !> Checkpoint a single particle subgroup
@@ -1942,7 +1934,7 @@ contains
 
     call write_attrs(h5_id, dim, particle_list%attr_names, attr_data)
     call write_attrs(h5_id, dim, particle_list%old_attr_names, old_attr_data)
-    call write_attrs(h5_id, dim, particle_list%old_field_names, old_field_data, prefix="Old")
+    call write_attrs(h5_id, dim, particle_list%old_field_names, old_field_data, prefix="old%")
 
     ! update schema file to read this subgroup from the checkpoint file
     call update_particle_subgroup_options(trim(particles_cp_filename), particle_list, name, &

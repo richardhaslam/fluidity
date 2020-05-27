@@ -19,43 +19,43 @@ solvers_converged = not "matrixdump" in files and not "matrixdump.info" in files
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D1_ids'][0]-1
+det_id = f.attrs['D1%ids'][0]-1
 D1_position = np.hstack([np.vstack([f['/Step#{i}/{dim}'.format(i=i, dim=dim)][det_id] for dim in ('x', 'y')]) for i in range(len(f))])
     </variable>
     <variable name="D2_position" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D2_ids'][0]-1
+det_id = f.attrs['D2%ids'][0]-1
 D2_position = np.hstack([np.vstack([f['/Step#{i}/{dim}'.format(i=i, dim=dim)][det_id] for dim in ('x', 'y')]) for i in range(len(f))])
     </variable>
     <variable name="D3_position" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D3_ids'][0]-1
+det_id = f.attrs['D3%ids'][0]-1
 D3_position = np.hstack([np.vstack([f['/Step#{i}/{dim}'.format(i=i, dim=dim)][det_id] for dim in ('x', 'y')]) for i in range(len(f))])
     </variable>
     <variable name="D1_tracer" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D1_ids'][0]-1
-D1_tracer = np.array([f['/Step#{}/Water_Tracer'.format(i)][det_id] for i in range(len(f))])
+det_id = f.attrs['D1%ids'][0]-1
+D1_tracer = np.array([f['/Step#{}/Water%Tracer'.format(i)][det_id] for i in range(len(f))])
     </variable>
     <variable name="D2_tracer" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D2_ids'][0]-1
-D2_tracer = np.array([f['/Step#{}/Water_Tracer'.format(i)][det_id] for i in range(len(f))])
+det_id = f.attrs['D2%ids'][0]-1
+D2_tracer = np.array([f['/Step#{}/Water%Tracer'.format(i)][det_id] for i in range(len(f))])
     </variable>
     <variable name="D3_tracer" language="python">
 import h5py
 import numpy as np
 f = h5py.File('detectors.detectors.h5part', 'r')
-det_id = f.attrs['D3_ids'][0]-1
-D3_tracer = np.array([f['/Step#{}/Water_Tracer'.format(i)][det_id] for i in range(len(f))])
+det_id = f.attrs['D3%ids'][0]-1
+D3_tracer = np.array([f['/Step#{}/Water%Tracer'.format(i)][det_id] for i in range(len(f))])
     </variable>
   </variables>
   <pass_tests>
