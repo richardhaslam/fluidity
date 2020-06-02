@@ -56,7 +56,8 @@ module particle_diagnostics
   public :: initialise_particle_diagnostics, update_particle_diagnostics, &
        & calculate_diagnostics_from_particles, calculate_ratio_from_particles, &
        & calculate_numbers_from_particles, initialise_constant_particle_diagnostics, &
-       & initialise_particle_diagnostic_fields_post_adapt, particle_cv_check
+       & initialise_particle_diagnostic_fields_post_adapt, particle_cv_check, &
+       & thomas_particle_check
 
   contains
 
@@ -626,6 +627,42 @@ module particle_diagnostics
     end do
 
   end subroutine particle_cv_check
+
+  subroutine thomas_particle_check(states)
+    use particles, only: particle_lists
+    type(state_type), dimension(:), target, intent(in) :: states
+
+    integer :: particle_groups, i,j,k, list_counter, particle_subgroups
+    real :: current_time
+    character(len=OPTION_PATH_LEN) :: group_path, subgroup_path
+
+    type(detector_type), pointer :: particle
+    ewrite(2,*) "In thomas_particle_check"
+    !Check if there are particles
+    particle_groups = option_count('/particles/particle_group')
+
+    if (particle_groups==0) return
+
+    call get_option("/timestepping/current_time", current_time)
+    ewrite(2,*) "At time: ", current_time
+    do i = 1, particle_groups
+       group_path = "/particles/particle_group["//int2str(i-1)//"]"
+       particle_subgroups = option_count(trim(group_path) // "/particle_subgroup")
+       do k = 1, particle_subgroups
+          subgroup_path = trim(group_path) // "/particle_subgroup["//int2str(k-1)//"]"
+          list_counter = list_counter + 1
+          particle =>particle_lists(list_counter)%first
+          check_loop: do j=1,particle_lists(list_counter)%length
+             ewrite(2,*) "ID: ", particle%id_number, " position: ", particle%position, " attribute size:", size(particle%attributes)
+             ewrite(2,*) "Attribute values: ", particle%attributes
+
+             particle => particle%next
+
+          end do check_loop
+       end do
+    end do
+       
+  end subroutine thomas_particle_check
 
   subroutine spawn_delete_particles(states, mesh, group_arrays, max_thresh, min_thresh, have_radius, radius, cap_percent)
     use particles, only: particle_lists

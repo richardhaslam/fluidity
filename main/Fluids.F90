@@ -76,7 +76,7 @@ module fluids_module
   use diagnostic_fields_wrapper
   use particle_diagnostics, only: initialise_particle_diagnostics, update_particle_diagnostics, &
        initialise_constant_particle_diagnostics, initialise_particle_diagnostic_fields_post_adapt, &
-       particle_cv_check
+       particle_cv_check, thomas_particle_check
   use checkpoint
   use goals
   use adaptive_timestepping
@@ -799,6 +799,8 @@ contains
              call qmesh(state, metric_tensor)
              if(have_option("/io/stat/output_before_adapts")) call write_diagnostics(state, current_time, dt, timestep)
              call run_diagnostics(state)
+             ewrite(2,*) "pre-adapt_state particle_check"
+             call thomas_particle_check(state)
 
              call adapt_state(state, metric_tensor)
 
@@ -991,9 +993,12 @@ contains
     end if
 
     !Diagnostic fields based on particles
+    ewrite(2,*) "Update_state_post_adapt"
+    call thomas_particle_check(state)
     call particle_cv_check(state)
     call initialise_particle_diagnostic_fields_post_adapt(state)
- 
+    ewrite(2,*) "Update_state_post_adapt finished particles"
+    call thomas_particle_check(state)
     ! Diagnostic fields
     call calculate_diagnostic_variables(state)
     call calculate_diagnostic_variables_new(state)
